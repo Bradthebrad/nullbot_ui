@@ -1,0 +1,28 @@
+# Wails / frontend build output
+/build/bin/
+/frontend/dist/
+
+# Dependencies
+/frontend/node_modules/
+node_modules/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Logs and local caches
+*.log
+*.tmp
+tmp/
+.cache/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
