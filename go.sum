@@ -1,7 +1,7 @@
 git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 h1:N3IGoHHp9pb6mj1cbXbuaSXV/UMKwmbKLf53nQmtqMA=
 git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3/go.mod h1:QtOLZGz8olr4qH2vWK0QH0w0O4T9fEIjMuWpKUsH7nc=
-github.com/Bradthebrad/nullbot v0.3.1-0.20260704143740-4ac0bad3c13f h1:RuA+7Y4ruStZfF/5VbWpksAnWz/2IX31Y473FtoaCn4=
-github.com/Bradthebrad/nullbot v0.3.1-0.20260704143740-4ac0bad3c13f/go.mod h1:UTLkbyoED5m3N0ZwGFnRK41Zs2Fbcm5cx2MDXSBMt8M=
+github.com/Bradthebrad/nullbot v0.4.0 h1:IEBKZE0N0WHwNRnkukzFgOZDKrvA6UFOzYbREZgHnYc=
+github.com/Bradthebrad/nullbot v0.4.0/go.mod h1:UTLkbyoED5m3N0ZwGFnRK41Zs2Fbcm5cx2MDXSBMt8M=
 github.com/Bradthebrad/tinychain v0.2.0 h1:PEst16q3++LJRLeI7C5bkdUi6LTWiKCrSAihzGtsxGQ=
 github.com/Bradthebrad/tinychain v0.2.0/go.mod h1:odKTVNpwDBecewebXJyS7Au0/m1LjzRdaS4pfnf+J+g=
 github.com/bep/debounce v1.2.1 h1:v67fRdBA9UQu2NhLFXrSg0Brw7CexQekrBwDMM8bzeY=
