@@ -788,6 +788,85 @@ export namespace app {
 		    return a;
 		}
 	}
+	export class ScheduleRequest {
+	    mode: string;
+	    at?: string;
+	    every?: string;
+	    delay?: string;
+	    name?: string;
+	    prompt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ScheduleRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mode = source["mode"];
+	        this.at = source["at"];
+	        this.every = source["every"];
+	        this.delay = source["delay"];
+	        this.name = source["name"];
+	        this.prompt = source["prompt"];
+	    }
+	}
+	export class ScheduledTask {
+	    id: string;
+	    name?: string;
+	    prompt: string;
+	    status: string;
+	    // Go type: time
+	    created_at: any;
+	    // Go type: time
+	    updated_at: any;
+	    // Go type: time
+	    next_run_at?: any;
+	    // Go type: time
+	    last_run_at?: any;
+	    // Go type: time
+	    finished_at?: any;
+	    repeat_every?: string;
+	    run_count: number;
+	    last_error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ScheduledTask(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.prompt = source["prompt"];
+	        this.status = source["status"];
+	        this.created_at = this.convertValues(source["created_at"], null);
+	        this.updated_at = this.convertValues(source["updated_at"], null);
+	        this.next_run_at = this.convertValues(source["next_run_at"], null);
+	        this.last_run_at = this.convertValues(source["last_run_at"], null);
+	        this.finished_at = this.convertValues(source["finished_at"], null);
+	        this.repeat_every = source["repeat_every"];
+	        this.run_count = source["run_count"];
+	        this.last_error = source["last_error"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	
 	
 	export class ThoughtSnapshot {
@@ -1632,6 +1711,7 @@ export namespace main {
 	    themes: ThemePalette[];
 	    usage: app.UsageSnapshot;
 	    tasks: app.AgentTask[];
+	    scheduled: app.ScheduledTask[];
 	    thoughts: app.ThoughtSnapshot[];
 	    files: FileBrowser;
 	    marketplace: MarketState;
@@ -1650,6 +1730,7 @@ export namespace main {
 	        this.themes = this.convertValues(source["themes"], ThemePalette);
 	        this.usage = this.convertValues(source["usage"], app.UsageSnapshot);
 	        this.tasks = this.convertValues(source["tasks"], app.AgentTask);
+	        this.scheduled = this.convertValues(source["scheduled"], app.ScheduledTask);
 	        this.thoughts = this.convertValues(source["thoughts"], app.ThoughtSnapshot);
 	        this.files = this.convertValues(source["files"], FileBrowser);
 	        this.marketplace = this.convertValues(source["marketplace"], MarketState);

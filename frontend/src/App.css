@@ -905,6 +905,81 @@ textarea {
   border-left: 3px solid color-mix(in srgb, var(--accent) 56%, transparent);
 }
 
+.tasks-view {
+  gap: 16px;
+}
+
+.schedule-panel {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--border) 38%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 76%, var(--bg));
+}
+
+.schedule-form {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.45fr) minmax(180px, 0.55fr) minmax(260px, 1.2fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.schedule-prompt textarea {
+  min-height: 44px;
+  max-height: 110px;
+  resize: vertical;
+}
+
+.scheduled-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 10px;
+}
+
+.schedule-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 28%, transparent);
+  border-left: 3px solid color-mix(in srgb, var(--accent) 56%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--activity) 72%, black);
+}
+
+.schedule-card.running {
+  border-left-color: var(--accent);
+}
+
+.schedule-card.error,
+.schedule-card.canceled {
+  border-left-color: #ff6b6b;
+}
+
+.schedule-card p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.task-section-title {
+  margin-top: 4px;
+}
+
+.empty-panel,
+.inline-error {
+  padding: 10px;
+  border: 1px dashed color-mix(in srgb, var(--border) 36%, transparent);
+  border-radius: 8px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--bg) 70%, black);
+}
+
+.inline-error {
+  color: #ffb4b4;
+  border-color: color-mix(in srgb, #ff6b6b 56%, transparent);
+}
+
 .task-card.running {
   border-left-color: var(--accent);
 }
@@ -957,6 +1032,13 @@ textarea {
   color: #070707;
   border-color: var(--accent);
   background: var(--accent);
+}
+
+.status-badge.active,
+.status-badge.done {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg));
 }
 
 .status-badge.error,
@@ -2020,6 +2102,10 @@ th {
   .plan-view,
   .two-column,
   .files-view .file-split {
+    grid-template-columns: 1fr;
+  }
+
+  .schedule-form {
     grid-template-columns: 1fr;
   }
 

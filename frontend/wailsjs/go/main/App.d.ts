@@ -17,6 +17,8 @@ export function BeginCodexLogin():Promise<app.CodexDeviceFlow>;
 
 export function BuildUsageReport(arg1:main.UsageFilter,arg2:boolean):Promise<main.UsageReport>;
 
+export function CancelScheduledTask(arg1:string):Promise<Array<app.ScheduledTask>>;
+
 export function CancelTask(arg1:string):Promise<Array<app.AgentTask>>;
 
 export function Command(arg1:string):Promise<app.Reply>;
@@ -31,9 +33,13 @@ export function CreateFile(arg1:main.FileCreateRequest):Promise<main.FileBrowser
 
 export function CreatePlan(arg1:string):Promise<app.Reply>;
 
+export function CreateScheduledTask(arg1:app.ScheduleRequest):Promise<Array<app.ScheduledTask>>;
+
 export function DeletePath(arg1:string):Promise<main.FileBrowser>;
 
 export function DeletePlan(arg1:string):Promise<app.Reply>;
+
+export function DeleteScheduledTask(arg1:string):Promise<Array<app.ScheduledTask>>;
 
 export function DiscoverMCPTools(arg1:string):Promise<Array<main.MCPToolInfo>>;
 
@@ -73,6 +79,8 @@ export function RenamePath(arg1:main.FileRenameRequest):Promise<main.FileBrowser
 
 export function Resume():Promise<app.Reply>;
 
+export function RunScheduledTaskNow(arg1:string):Promise<Array<app.ScheduledTask>>;
+
 export function SaveAccountKeys(arg1:app.APIKeys):Promise<main.AccountState>;
 
 export function SaveConfig(arg1:app.Config,arg2:app.APIKeys):Promise<main.UIState>;
@@ -88,6 +96,8 @@ export function SavePrompts(arg1:app.PromptConfig):Promise<main.UIState>;
 export function SaveSkill(arg1:main.SkillSaveRequest):Promise<main.SkillFile>;
 
 export function SaveUsageReport(arg1:main.UsageFilter):Promise<main.UsageReport>;
+
+export function ScheduledTasks():Promise<Array<app.ScheduledTask>>;
 
 export function SearchSessions(arg1:string):Promise<Array<main.SessionSummary>>;
 

@@ -50,6 +50,7 @@ type UIState struct {
 	Themes      []ThemePalette            `json:"themes"`
 	Usage       nullbot.UsageSnapshot     `json:"usage"`
 	Tasks       []nullbot.AgentTask       `json:"tasks"`
+	Scheduled   []nullbot.ScheduledTask   `json:"scheduled"`
 	Thoughts    []nullbot.ThoughtSnapshot `json:"thoughts"`
 	Files       FileBrowser               `json:"files"`
 	Marketplace MarketState               `json:"marketplace"`
@@ -276,6 +277,7 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	if a.activityStop == nil && a.bot != nil {
+		a.bot.StartScheduler()
 		a.activityStop = a.bot.SubscribeActivity(func(record nullbot.ActivityRecord) {
 			a.emit("activity", record)
 		})
@@ -304,6 +306,7 @@ func (a *App) State() (UIState, error) {
 		Themes:      themeCatalog(),
 		Usage:       a.bot.UsageSnapshot(),
 		Tasks:       a.bot.TaskSnapshots(),
+		Scheduled:   a.bot.ScheduledTasks(),
 		Thoughts:    a.bot.ThoughtSnapshots(),
 		Files:       files,
 		Marketplace: market,
@@ -1280,6 +1283,38 @@ func (a *App) SaveCurrentSession(name string) (SessionSummary, error) {
 
 func (a *App) Tasks() ([]nullbot.AgentTask, error) {
 	return a.bot.TaskSnapshots(), nil
+}
+
+func (a *App) ScheduledTasks() ([]nullbot.ScheduledTask, error) {
+	return a.bot.ScheduledTasks(), nil
+}
+
+func (a *App) CreateScheduledTask(req nullbot.ScheduleRequest) ([]nullbot.ScheduledTask, error) {
+	if _, err := a.bot.CreateScheduledTask(req); err != nil {
+		return a.bot.ScheduledTasks(), err
+	}
+	return a.bot.ScheduledTasks(), nil
+}
+
+func (a *App) RunScheduledTaskNow(id string) ([]nullbot.ScheduledTask, error) {
+	if _, err := a.bot.RunScheduledTaskNow(id); err != nil {
+		return a.bot.ScheduledTasks(), err
+	}
+	return a.bot.ScheduledTasks(), nil
+}
+
+func (a *App) CancelScheduledTask(id string) ([]nullbot.ScheduledTask, error) {
+	if _, ok := a.bot.CancelScheduledTask(id); !ok {
+		return a.bot.ScheduledTasks(), fmt.Errorf("schedule not found")
+	}
+	return a.bot.ScheduledTasks(), nil
+}
+
+func (a *App) DeleteScheduledTask(id string) ([]nullbot.ScheduledTask, error) {
+	if !a.bot.DeleteScheduledTask(id) {
+		return a.bot.ScheduledTasks(), fmt.Errorf("schedule not found")
+	}
+	return a.bot.ScheduledTasks(), nil
 }
 
 func (a *App) CancelTask(id string) ([]nullbot.AgentTask, error) {

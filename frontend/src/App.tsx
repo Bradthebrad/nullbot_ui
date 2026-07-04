@@ -51,14 +51,17 @@ import {
   BeginCodexLogin,
   BuildUsageReport,
   CancelTask,
+  CancelScheduledTask,
   Command,
   CompactConversation,
   CompletePath,
   CreateDirectory,
   CreateFile,
   CreatePlan,
+  CreateScheduledTask,
   DeletePath,
   DeletePlan,
+  DeleteScheduledTask,
   ExecutePlan,
   InstallMarketPackage,
   ListFiles,
@@ -74,6 +77,7 @@ import {
   ReadSkill,
   RenamePath,
   Resume,
+  RunScheduledTaskNow,
   SaveConfig,
   SaveAccountKeys,
   SaveCurrentSession,
@@ -94,6 +98,7 @@ import {
   Skills,
   State,
   Submit,
+  ScheduledTasks,
   Tasks,
   Thoughts,
   ToggleMCPServer,
@@ -2141,13 +2146,138 @@ function PlanView({refreshState}: {refreshState: () => void}) {
 
 function TasksView() {
   const [tasks, setTasks] = useState<any[]>([]);
+  const [scheduled, setScheduled] = useState<any[]>([]);
+  const [mode, setMode] = useState('in');
+  const [delay, setDelay] = useState('10m');
+  const [at, setAt] = useState(defaultScheduleDateTime());
+  const [prompt, setPrompt] = useState('');
+  const [working, setWorking] = useState('');
+  const [error, setError] = useState('');
+
   useEffect(() => {
-    Tasks().then(setTasks);
-    const id = window.setInterval(() => Tasks().then(setTasks), 1500);
+    refresh();
+    const id = window.setInterval(refresh, 1500);
     return () => window.clearInterval(id);
   }, []);
+
+  async function refresh() {
+    const [nextTasks, nextScheduled] = await Promise.all([Tasks(), ScheduledTasks()]);
+    setTasks(nextTasks || []);
+    setScheduled(nextScheduled || []);
+  }
+
+  async function createSchedule() {
+    const cleanPrompt = prompt.trim();
+    if (!cleanPrompt) {
+      setError('Add a message for the scheduled task.');
+      return;
+    }
+    setError('');
+    setWorking('create');
+    try {
+      const req: any = {mode, prompt: cleanPrompt};
+      if (mode === 'at') req.at = at;
+      if (mode === 'every') req.every = delay;
+      if (mode === 'in') req.delay = delay;
+      setScheduled(await CreateScheduledTask(req));
+      setPrompt('');
+    } catch (err: any) {
+      setError(err?.message || String(err));
+    } finally {
+      setWorking('');
+    }
+  }
+
+  async function runSchedule(id: string) {
+    setWorking(`run-${id}`);
+    try {
+      setScheduled(await RunScheduledTaskNow(id));
+      await refresh();
+    } finally {
+      setWorking('');
+    }
+  }
+
+  async function cancelSchedule(id: string) {
+    setWorking(`cancel-${id}`);
+    try {
+      setScheduled(await CancelScheduledTask(id));
+    } finally {
+      setWorking('');
+    }
+  }
+
+  async function deleteSchedule(id: string) {
+    if (!window.confirm('Delete this scheduled task?')) return;
+    setWorking(`delete-${id}`);
+    try {
+      setScheduled(await DeleteScheduledTask(id));
+    } finally {
+      setWorking('');
+    }
+  }
+
   return (
-    <section className="view-column">
+    <section className="view-column tasks-view">
+      <div className="schedule-panel">
+        <div className="preview-header">
+          <div>
+            <h2>Scheduled Tasks</h2>
+            <span>Create one-shot or recurring background agent runs.</span>
+          </div>
+          {working === 'create' && <span className="loading-inline"><span className="spinner" /> Scheduling...</span>}
+        </div>
+        <div className="schedule-form">
+          <label className="field">
+            <span>When</span>
+            <select value={mode} onChange={(event) => setMode(event.target.value)}>
+              <option value="in">In duration</option>
+              <option value="at">At date/time</option>
+              <option value="every">Every duration</option>
+            </select>
+          </label>
+          {mode === 'at' ? (
+            <label className="field">
+              <span>Date and time</span>
+              <input type="datetime-local" value={at} onChange={(event) => setAt(event.target.value)} />
+            </label>
+          ) : (
+            <label className="field">
+              <span>{mode === 'every' ? 'Repeat every' : 'Delay'}</span>
+              <input value={delay} onChange={(event) => setDelay(event.target.value)} placeholder="10m, 2h, 1d, daily" />
+            </label>
+          )}
+          <label className="field schedule-prompt">
+            <span>Message</span>
+            <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Ask NullBot to do something later..." />
+          </label>
+          <button className="primary" onClick={createSchedule} disabled={working === 'create'}>
+            {working === 'create' ? <span className="spinner dark" /> : <CalendarDays size={16} />}
+            Schedule
+          </button>
+        </div>
+        {error && <div className="inline-error">{error}</div>}
+        <div className="scheduled-grid">
+          {scheduled.length === 0 ? (
+            <div className="empty-panel">No scheduled tasks yet.</div>
+          ) : scheduled.map((item) => (
+            <ScheduleCard
+              key={item.id}
+              item={item}
+              working={working}
+              onRun={() => runSchedule(item.id)}
+              onCancel={() => cancelSchedule(item.id)}
+              onDelete={() => deleteSchedule(item.id)}
+            />
+          ))}
+        </div>
+      </div>
+      <div className="preview-header task-section-title">
+        <div>
+          <h2>Running and Recent Tasks</h2>
+          <span>{tasks.length ? `${tasks.length} task records` : 'No tasks recorded yet.'}</span>
+        </div>
+      </div>
       {tasks.map((task) => (
         <TaskCard key={task.id} task={task} onCancel={async () => setTasks(await CancelTask(task.id))} />
       ))}
@@ -2312,6 +2442,44 @@ function TaskCard({task, onCancel}: {task: any; onCancel: () => void}) {
           ))}
         </div>
       )}
+    </article>
+  );
+}
+
+function ScheduleCard({item, working, onRun, onCancel, onDelete}: {item: any; working: string; onRun: () => void; onCancel: () => void; onDelete: () => void}) {
+  const canCancel = item.status === 'active' || item.status === 'running' || item.status === 'error';
+  return (
+    <article className={`schedule-card ${statusClass(item.status)}`}>
+      <div className="task-head">
+        <div>
+          <strong>{item.name || item.id}</strong>
+          <span>{item.id}{item.repeat_every ? ` / every ${item.repeat_every}` : ''}</span>
+        </div>
+        <span className={`status-badge ${statusClass(item.status)}`}>{item.status}</span>
+      </div>
+      <p>{item.prompt}</p>
+      <div className="token-line">
+        {item.next_run_at && <span>next {formatDateTime(item.next_run_at)}</span>}
+        {item.last_run_at && <span>last {formatDateTime(item.last_run_at)}</span>}
+        <span>runs {item.run_count || 0}</span>
+      </div>
+      {item.last_error && <div className="inline-error">{item.last_error}</div>}
+      <div className="row-actions">
+        <button onClick={onRun} disabled={working === `run-${item.id}`}>
+          {working === `run-${item.id}` ? <span className="spinner" /> : <Play size={16} />}
+          Run Now
+        </button>
+        {canCancel && (
+          <button onClick={onCancel} disabled={working === `cancel-${item.id}`}>
+            {working === `cancel-${item.id}` ? <span className="spinner" /> : <CircleStop size={16} />}
+            Cancel
+          </button>
+        )}
+        <button className="inline-danger" onClick={onDelete} disabled={working === `delete-${item.id}`}>
+          {working === `delete-${item.id}` ? <span className="spinner" /> : <Trash2 size={16} />}
+          Delete
+        </button>
+      </div>
     </article>
   );
 }
@@ -2755,6 +2923,12 @@ function formatDateTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'});
+}
+
+function defaultScheduleDateTime() {
+  const date = new Date(Date.now() + 30 * 60 * 1000);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function formatSessionTitle(session: any) {

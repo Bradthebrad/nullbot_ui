@@ -30,6 +30,10 @@ export function BuildUsageReport(arg1, arg2) {
   return window['go']['main']['App']['BuildUsageReport'](arg1, arg2);
 }
 
+export function CancelScheduledTask(arg1) {
+  return window['go']['main']['App']['CancelScheduledTask'](arg1);
+}
+
 export function CancelTask(arg1) {
   return window['go']['main']['App']['CancelTask'](arg1);
 }
@@ -58,12 +62,20 @@ export function CreatePlan(arg1) {
   return window['go']['main']['App']['CreatePlan'](arg1);
 }
 
+export function CreateScheduledTask(arg1) {
+  return window['go']['main']['App']['CreateScheduledTask'](arg1);
+}
+
 export function DeletePath(arg1) {
   return window['go']['main']['App']['DeletePath'](arg1);
 }
 
 export function DeletePlan(arg1) {
   return window['go']['main']['App']['DeletePlan'](arg1);
+}
+
+export function DeleteScheduledTask(arg1) {
+  return window['go']['main']['App']['DeleteScheduledTask'](arg1);
 }
 
 export function DiscoverMCPTools(arg1) {
@@ -142,6 +154,10 @@ export function Resume() {
   return window['go']['main']['App']['Resume']();
 }
 
+export function RunScheduledTaskNow(arg1) {
+  return window['go']['main']['App']['RunScheduledTaskNow'](arg1);
+}
+
 export function SaveAccountKeys(arg1) {
   return window['go']['main']['App']['SaveAccountKeys'](arg1);
 }
@@ -172,6 +188,10 @@ export function SaveSkill(arg1) {
 
 export function SaveUsageReport(arg1) {
   return window['go']['main']['App']['SaveUsageReport'](arg1);
+}
+
+export function ScheduledTasks() {
+  return window['go']['main']['App']['ScheduledTasks']();
 }
 
 export function SearchSessions(arg1) {
