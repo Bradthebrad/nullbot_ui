@@ -1,15 +1,13 @@
-module yourbot/nullbot_ui
+module github.com/Bradthebrad/nullbot_ui
 
 go 1.26.4
 
-require (
-	github.com/wailsapp/wails/v2 v2.12.0
-	tinychain/mcp v0.0.0
-	yourbot v0.0.0
-)
+require github.com/wailsapp/wails/v2 v2.12.0
 
 require (
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 // indirect
+	github.com/Bradthebrad/nullbot v0.3.0
+	github.com/Bradthebrad/tinychain v0.2.0
 	github.com/bep/debounce v1.2.1 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
@@ -37,14 +35,4 @@ require (
 	golang.org/x/net v0.38.0 // indirect
 	golang.org/x/sys v0.37.0 // indirect
 	golang.org/x/text v0.30.0 // indirect
-	tinychain v0.0.0 // indirect
-	tinychain/agent v0.0.0 // indirect
 )
-
-replace yourbot => ../nullbot
-
-replace tinychain => ../tinychain/client
-
-replace tinychain/agent => ../tinychain/agent
-
-replace tinychain/mcp => ../tinychain/mcp

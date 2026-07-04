@@ -2,7 +2,7 @@
 
 NullBot UI is a Wails + React desktop shell for the NullBot agent runtime. It keeps the underlying NullBot configuration, model routing, session history, plans, skills, usage tracking, MCP marketplace, and tool integrations, then maps them into a richer graphical workflow.
 
-This repo is intentionally a UI layer. The Go backend imports the sibling `../nullbot` module and the `../tinychain/*` packages through local `replace` directives while the NullBot app internals are still organized under Go `internal` packages.
+This repo is intentionally a UI layer. The Go backend imports the public `github.com/Bradthebrad/nullbot/pkg/app` runtime package and the tagged `github.com/Bradthebrad/tinychain` module, so a fresh clone can build without co-located sibling repositories.
 
 ## What It Includes
 
@@ -26,14 +26,15 @@ The TUI remains the leanest option for terminal workflows and quick keyboard ope
 
 Prerequisites:
 
-- Go with the same version used by the sibling NullBot checkout.
+- Go.
 - Node.js and npm.
 - Wails CLI.
-- Local sibling checkouts for `../nullbot`, `../tinychain/client`, `../tinychain/agent`, and `../tinychain/mcp`.
+- Network access for `go mod download` and `npm install`.
 
 Install frontend dependencies:
 
 ```powershell
+go mod download
 cd frontend
 npm install
 ```

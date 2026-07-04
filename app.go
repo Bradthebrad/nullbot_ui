@@ -23,8 +23,8 @@ import (
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
-	"tinychain/mcp"
-	nullbot "yourbot/internal/app"
+	nullbot "github.com/Bradthebrad/nullbot/pkg/app"
+	"github.com/Bradthebrad/tinychain/mcp"
 )
 
 const (
