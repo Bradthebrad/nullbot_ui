@@ -1,0 +1,14 @@
+.attachment-chip .attachment-details { min-width: 0; flex: 1; }
+.attachment-chip .attachment-details strong { overflow: hidden; text-overflow: ellipsis; }
+.attachment-chip .attachment-details .attachment-error { white-space: normal; overflow-wrap: anywhere; color: var(--danger, #ef7777); }
+.attachment-chip .attachment-thumbnail { width: 52px; height: 52px; min-width: 52px; padding: 0; overflow: hidden; border-radius: 6px; }
+.attachment-thumbnail img { width: 100%; height: 100%; object-fit: cover; }
+.attachment-file-icon { font-size: 24px; }
+.attachment-preparing { opacity: .85; }
+.attachment-chip .attachment-remove { font-size: 22px; min-width: 30px; }
+.attachment-send-block { display: block; margin: 6px 0; color: var(--danger, #ef7777); }
+.attachment-preview { max-width: min(94vw, 1200px); max-height: 92vh; padding: 16px; border: 1px solid var(--border, #555); border-radius: 12px; background: var(--panel, #19212c); color: var(--text, #eee); }
+.attachment-preview::backdrop { background: rgb(0 0 0 / .75); }
+.attachment-preview-content header { display: flex; gap: 20px; align-items: center; justify-content: space-between; margin-bottom: 12px; overflow-wrap: anywhere; }
+.attachment-preview-content img { display: block; max-width: 85vw; max-height: 76vh; object-fit: contain; margin: auto; }
+.attachment-thumbnail:focus-visible, .attachment-remove:focus-visible, .attachment-preview button:focus-visible { outline: 2px solid var(--accent, #80bfff); outline-offset: 3px; }

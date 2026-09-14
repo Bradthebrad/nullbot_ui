@@ -152,6 +152,7 @@ type AttachmentInfo struct {
 	Kind         string `json:"kind"`
 	Size         int64  `json:"size,omitempty"`
 	Error        string `json:"error,omitempty"`
+	PreviewURL   string `json:"preview_url,omitempty"`
 }
 
 type SkillFile struct {
@@ -280,6 +281,10 @@ func (a *App) startup(ctx context.Context) {
 		a.bot.StartScheduler()
 		a.activityStop = a.bot.SubscribeActivity(func(record nullbot.ActivityRecord) {
 			a.emit("activity", record)
+			a.publishSubmissionCompletion(record)
+			if record.Kind == "on_llm_new_token" || record.Kind == "on_llm_reasoning" || record.Kind == "on_chat_model_start" || record.Kind == "on_llm_end" || record.Kind == "on_llm_error" {
+				a.emit("agent:stream", record)
+			}
 		})
 	}
 	if a.initErr != nil {
@@ -325,17 +330,15 @@ func (a *App) Command(input string) (nullbot.Reply, error) {
 }
 
 func (a *App) SendAlso(question string) (nullbot.Reply, error) {
-	if a.initErr != nil {
-		return nullbot.Reply{}, a.initErr
-	}
-	reply := a.bot.Submit(context.Background(), "/also "+strings.TrimSpace(question))
-	reply.Activity = nil
-	return reply, nil
+	return a.SubmitChatRequest(ChatRequest{Mode: "also", Text: question})
 }
 
 func (a *App) Pause() (nullbot.Reply, error) {
 	a.bot.RequestPause()
-	reply := a.bot.Submit(context.Background(), "/pause")
+	reply := a.bot.State()
+	reply.Command = "/pause"
+	reply.Message = "Pause requested. Queued messages are held until Resume."
+	reply.Activity = nil
 	a.emit("reply", reply)
 	return reply, nil
 }
@@ -357,6 +360,7 @@ func (a *App) Analyze(focus string) (nullbot.Reply, error) {
 }
 
 func (a *App) CompactConversation(focus string) (nullbot.Reply, error) {
+	before := a.bot.State().History
 	cmd := "/compact"
 	if strings.TrimSpace(focus) != "" {
 		cmd += " " + strings.TrimSpace(focus)
@@ -369,12 +373,15 @@ func (a *App) CompactConversation(focus string) (nullbot.Reply, error) {
 	if summary == "" {
 		summary = "Conversation compacted."
 	}
-	a.bot.ReplaceHistory([]nullbot.Message{{
+	if !a.bot.TryReplaceHistoryIfUnchanged(before, []nullbot.Message{{
 		Role:    "assistant",
 		Content: "Conversation compacted.\n\n" + summary,
 		Time:    time.Now().UTC(),
-	}})
+	}}) {
+		return nullbot.Reply{}, fmt.Errorf("conversation changed or submissions are active; compact again when idle")
+	}
 	updated := a.bot.State()
+	updated.Data["history_replace"] = true
 	updated.Message = "Conversation compacted."
 	updated.OpenPanel = "chat"
 	a.emit("reply", updated)
@@ -395,6 +402,9 @@ func (a *App) submit(input string) (nullbot.Reply, error) {
 }
 
 func (a *App) startBackgroundSubmit(input, label string) (nullbot.Reply, error) {
+	if !strings.HasPrefix(strings.TrimSpace(input), "/") {
+		return a.SubmitChatRequest(ChatRequest{Mode: "normal", Text: input})
+	}
 	if a.initErr != nil {
 		return nullbot.Reply{}, a.initErr
 	}
@@ -822,8 +832,57 @@ func (a *App) PreviewFile(path string) (FilePreview, error) {
 	return preview, nil
 }
 
+// checkUIProjectPath fails closed for irregular ancestors (notably Windows
+// junctions, which current Go EvalSymlinks does not resolve), then delegates
+// canonical path and overlapping-grant authorization to the shared policy.
+func checkUIProjectPath(config nullbot.Config, path string, write, tree bool) (string, error) {
+	checkAncestors := func(path string) error {
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			return err
+		}
+		for {
+			info, err := os.Lstat(abs)
+			if err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			if err == nil && info.Mode()&os.ModeIrregular != 0 {
+				return fmt.Errorf("unsupported reparse point or irregular path: %s", abs)
+			}
+			parent := filepath.Dir(abs)
+			if parent == abs {
+				return nil
+			}
+			abs = parent
+		}
+	}
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(config.WorkspaceDir, path)
+	}
+	paths := []string{path}
+	if len(config.Projects) == 0 {
+		paths = append(paths, config.WorkspaceDir)
+	}
+	for _, p := range config.Projects {
+		paths = append(paths, p.Path)
+	}
+	for _, candidate := range paths {
+		if err := checkAncestors(candidate); err != nil {
+			return "", err
+		}
+	}
+	resolved, err := nullbot.CheckProjectPath(config, path, write, tree)
+	if err != nil {
+		return "", err
+	}
+	if err := checkAncestors(resolved); err != nil {
+		return "", err
+	}
+	return resolved, nil
+}
+
 func (a *App) SaveFile(req SaveFileRequest) (FilePreview, error) {
-	path, err := filepath.Abs(filepath.Clean(req.Path))
+	path, err := checkUIProjectPath(a.bot.Config(), req.Path, true, false)
 	if err != nil {
 		return FilePreview{}, err
 	}
@@ -848,6 +907,9 @@ func (a *App) CreateDirectory(req FileCreateRequest) (FileBrowser, error) {
 	if err != nil {
 		return FileBrowser{}, err
 	}
+	if _, err := checkUIProjectPath(a.bot.Config(), target, true, false); err != nil {
+		return FileBrowser{}, err
+	}
 	if err := os.Mkdir(target, 0700); err != nil {
 		return FileBrowser{}, err
 	}
@@ -857,6 +919,9 @@ func (a *App) CreateDirectory(req FileCreateRequest) (FileBrowser, error) {
 func (a *App) CreateFile(req FileCreateRequest) (FileBrowser, error) {
 	parent, target, err := createTargetPath(req.Dir, req.Name)
 	if err != nil {
+		return FileBrowser{}, err
+	}
+	if _, err := checkUIProjectPath(a.bot.Config(), target, true, false); err != nil {
 		return FileBrowser{}, err
 	}
 	file, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
@@ -890,6 +955,12 @@ func (a *App) RenamePath(req FileRenameRequest) (FileBrowser, error) {
 	} else if !os.IsNotExist(err) {
 		return FileBrowser{}, err
 	}
+	if _, err := checkUIProjectPath(a.bot.Config(), path, true, true); err != nil {
+		return FileBrowser{}, err
+	}
+	if _, err := checkUIProjectPath(a.bot.Config(), target, true, true); err != nil {
+		return FileBrowser{}, err
+	}
 	if err := os.Rename(path, target); err != nil {
 		return FileBrowser{}, err
 	}
@@ -897,7 +968,7 @@ func (a *App) RenamePath(req FileRenameRequest) (FileBrowser, error) {
 }
 
 func (a *App) DeletePath(path string) (FileBrowser, error) {
-	path, err := filepath.Abs(filepath.Clean(path))
+	path, err := checkUIProjectPath(a.bot.Config(), path, true, true)
 	if err != nil {
 		return FileBrowser{}, err
 	}
@@ -924,7 +995,13 @@ func (a *App) DeletePath(path string) (FileBrowser, error) {
 func (a *App) AttachFiles(paths []string) ([]AttachmentInfo, error) {
 	out := make([]AttachmentInfo, 0, len(paths))
 	for _, raw := range paths {
-		raw = strings.Trim(raw, "\"'` \t\r\n")
+		// Strip one matching quote pair, not arbitrary filename characters.
+		if _, ok := attachmentPath(raw); !ok {
+			raw = strings.TrimSpace(raw)
+			if len(raw) >= 2 && strings.ContainsRune("\"'`", rune(raw[0])) && raw[len(raw)-1] == raw[0] {
+				raw = raw[1 : len(raw)-1]
+			}
+		}
 		if raw == "" {
 			continue
 		}
@@ -998,6 +1075,30 @@ func (a *App) SaveSkill(req SkillSaveRequest) (SkillFile, error) {
 	}
 	dir := filepath.Join(root, slug)
 	path := filepath.Join(dir, "SKILL.md")
+	// Configured skill roots are app-managed even outside projects. First
+	// confine the destination to that root, resolving symlinks; then include
+	// all project grants so overlapping read-only projects still win.
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return SkillFile{}, err
+	}
+	path = filepath.Join(root, slug, "SKILL.md")
+	skillConfig := config
+	skillConfig.Projects = []nullbot.Project{{ID: "skill-root", Path: root, Permission: "read-write"}}
+	path, err = checkUIProjectPath(skillConfig, path, true, false)
+	if err != nil {
+		return SkillFile{}, err
+	}
+	projects := config.Projects
+	if len(projects) == 0 {
+		projects = []nullbot.Project{{Path: config.WorkspaceDir, Permission: "read-only"}}
+	}
+	skillConfig.Projects = append(skillConfig.Projects, projects...)
+	path, err = checkUIProjectPath(skillConfig, path, true, false)
+	if err != nil {
+		return SkillFile{}, err
+	}
+	dir = filepath.Dir(path)
 	if _, err := os.Stat(path); err == nil && !req.Overwrite {
 		return SkillFile{}, fmt.Errorf("%s already exists", path)
 	}
@@ -1058,6 +1159,20 @@ func (a *App) DiscoverMCPTools(id string) ([]MCPToolInfo, error) {
 	entry, ok := config.EnabledMCPServers[id]
 	if !ok {
 		return nil, fmt.Errorf("MCP server %q is not configured", id)
+	}
+	if !entry.Enabled {
+		return nil, fmt.Errorf("MCP server %q is disabled", id)
+	}
+	if err := nullbot.ValidateProjects(config); err != nil {
+		return nil, err
+	}
+	if len(config.Projects) == 0 {
+		return nil, fmt.Errorf("MCP discovery requires all projects to have Full access")
+	}
+	for _, project := range config.Projects {
+		if project.Permission != "full" {
+			return nil, fmt.Errorf("MCP discovery requires all projects to have Full access")
+		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
@@ -1225,8 +1340,19 @@ func (a *App) LoadSession(sessionID string, limit int) (nullbot.Reply, error) {
 	if err != nil {
 		return nullbot.Reply{}, err
 	}
-	a.bot.ReplaceHistory(messages)
+	// Also has an independent conversation. Older session logs may contain its
+	// public output; never import those entries into the primary conversation.
+	primary := make([]nullbot.Message, 0, len(messages))
+	for _, message := range messages {
+		if message.Lane != "also" {
+			primary = append(primary, message)
+		}
+	}
+	if !a.bot.TryReplaceHistory(primary) {
+		return nullbot.Reply{}, fmt.Errorf("cannot load a session while submissions are active or queued")
+	}
 	reply := a.bot.State()
+	reply.Data["history_replace"] = true
 	reply.Message = "Loaded session " + sessionID + "."
 	a.emit("reply", reply)
 	return reply, nil
@@ -1585,117 +1711,6 @@ func readPathSuggestions(parent, prefix string) ([]PathSuggestion, error) {
 		})
 	}
 	return suggestions, nil
-}
-
-func (a *App) attachFile(source string) AttachmentInfo {
-	info := AttachmentInfo{OriginalPath: source, Name: filepath.Base(source), Path: source}
-	copied, err := a.copyAttachmentIntoWorkspace(source)
-	if err != nil {
-		info.Error = err.Error()
-		return info
-	}
-	stat, _ := os.Stat(copied)
-	info.Path = copied
-	info.Name = filepath.Base(copied)
-	info.Kind = fileKind(copied)
-	if stat != nil {
-		info.Size = stat.Size()
-	}
-	info.Token = attachmentToken(copied)
-	return info
-}
-
-func (a *App) copyAttachmentIntoWorkspace(source string) (string, error) {
-	source = filepath.Clean(source)
-	info, err := os.Stat(source)
-	if err != nil {
-		return "", err
-	}
-	if info.IsDir() {
-		return "", fmt.Errorf("directories cannot be attached: %s", source)
-	}
-	config := a.bot.Config()
-	workspace := strings.TrimSpace(config.WorkspaceDir)
-	if workspace == "" {
-		workspace = "."
-	}
-	workspace, err = filepath.Abs(workspace)
-	if err != nil {
-		return "", err
-	}
-	destRoot := filepath.Join(workspace, ".nullbot", "attachments", time.Now().Format("20060102-150405-000000000"))
-	if err := os.MkdirAll(destRoot, 0700); err != nil {
-		return "", err
-	}
-	dest := uniqueAttachmentPath(filepath.Join(destRoot, filepath.Base(source)))
-	if err := copyFile(source, dest); err != nil {
-		return "", err
-	}
-	return dest, nil
-}
-
-func attachmentPathsFromText(text string) []string {
-	text = strings.TrimSpace(text)
-	if text == "" || strings.Contains(text, "@file(") {
-		return nil
-	}
-	if path, ok := attachmentPath(text); ok {
-		return []string{path}
-	}
-	var paths []string
-	for _, raw := range strings.Fields(text) {
-		path := strings.Trim(raw, "\"'`")
-		path = strings.TrimRight(path, ".,;:!?")
-		if found, ok := attachmentPath(path); ok {
-			paths = append(paths, found)
-		}
-	}
-	return paths
-}
-
-func attachmentPath(path string) (string, bool) {
-	if path == "" || strings.HasPrefix(path, "@file(") {
-		return "", false
-	}
-	if info, err := os.Stat(path); err == nil && !info.IsDir() {
-		return filepath.Clean(path), true
-	}
-	return "", false
-}
-
-func attachmentToken(path string) string {
-	return fmt.Sprintf("@file(%q)", filepath.Clean(path))
-}
-
-func uniqueAttachmentPath(path string) string {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return path
-	}
-	ext := filepath.Ext(path)
-	base := strings.TrimSuffix(path, ext)
-	for i := 2; ; i++ {
-		candidate := fmt.Sprintf("%s-%d%s", base, i, ext)
-		if _, err := os.Stat(candidate); os.IsNotExist(err) {
-			return candidate
-		}
-	}
-}
-
-func copyFile(source, dest string) error {
-	in, err := os.Open(source)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	out, err := os.Create(dest)
-	if err != nil {
-		return err
-	}
-	if _, err := io.Copy(out, in); err != nil {
-		_ = out.Close()
-		return err
-	}
-	return out.Close()
 }
 
 func (a *App) marketState(refresh bool) MarketState {

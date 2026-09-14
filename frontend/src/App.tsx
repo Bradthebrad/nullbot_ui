@@ -1,4 +1,19 @@
 import {useEffect, useRef, useState} from 'react';
+import {useComposerDraft} from './useComposerDraft';
+import {useAttachments} from './useAttachments';
+import {attachmentSendBlock, handleAttachmentPaste} from './attachments';
+import AttachmentTray from './AttachmentTray';
+import BusySendDialog from './BusySendDialog';
+import {submitChatRequest, makeChatRequest, chatSubmissionState, removeQueuedChat, type ChatMode, type SubmissionSnapshot} from './chatSubmission';
+import {useChatLayout, ResizeHandle} from './ChatLayout';
+import './ux.css';
+import ProjectsView, {Project, ProjectsState} from './ProjectsView';
+import ModelsView from './ModelsView';
+import {useSkillContext, SkillComposer, SkillContextNotice} from './SkillComposer';
+import './integration.css';
+
+const loadProjects = (): Promise<ProjectsState> => (window as any).go.main.App.Projects();
+const saveProjects = (projects: Project[], primary: string): Promise<ProjectsState> => (window as any).go.main.App.SaveProjects(projects, primary);
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
@@ -42,12 +57,12 @@ import {
 } from 'lucide-react';
 import botArt from './assets/nullbot-bot.png';
 import './App.css';
+import './streaming.css';
+import './chat-ux.css';
 import {
   AccountStatus,
   AddMCPServer,
   Analyze,
-  AttachFiles,
-  AttachTextPaths,
   BeginCodexLogin,
   BuildUsageReport,
   CancelTask,
@@ -86,7 +101,6 @@ import {
   SavePrompts,
   SaveSkill,
   SearchSessions,
-  SendAlso,
   SetBotName,
   SetModel,
   SetTheme,
@@ -103,11 +117,12 @@ import {
   Thoughts,
   ToggleMCPServer,
 } from '../wailsjs/go/main/App';
-import {CanResolveFilePaths, EventsOn, OnFileDrop, OnFileDropOff} from '../wailsjs/runtime/runtime';
+import {EventsOn, OnFileDrop, OnFileDropOff} from '../wailsjs/runtime/runtime';
 
 type View =
   | 'chat'
   | 'agents'
+  | 'projects'
   | 'files'
   | 'models'
   | 'settings'
@@ -127,6 +142,7 @@ type AnyMap = Record<string, any>;
 const navItems: Array<{id: View; label: string; icon: any}> = [
   {id: 'chat', label: 'Chat', icon: MessageSquare},
   {id: 'agents', label: 'Agents', icon: Brain},
+  {id: 'projects', label: 'Projects', icon: FolderPlus},
   {id: 'files', label: 'Files', icon: Files},
   {id: 'models', label: 'Models', icon: Bot},
   {id: 'settings', label: 'Settings', icon: Settings},
@@ -155,7 +171,8 @@ const slashForView: Partial<Record<View, string>> = {
 function App() {
   const [view, setView] = useState<View>('chat');
   const [ui, setUi] = useState<any>(null);
-  const [messages, setMessages] = useState<any[]>([]);
+  const [messages, updateMessages] = useState<any[]>([]);
+  const setMessages = (next: any) => updateMessages(current => typeof next === 'function' ? next(current) : next.length ? reconcileChatHistory(current, next) : []);
   const [activity, setActivity] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('Starting NullBot UI');
@@ -164,19 +181,34 @@ function App() {
   useEffect(() => {
     refreshState();
     const offActivity = EventsOn('activity', (record: any) => {
-      setActivity((current) => [...current.slice(-399), record]);
+      updateMessages(current => ingestChatStream(current, record));
+      setActivity((current) => mergeActivityRecords(current, [record], true));
     });
     const offReply = EventsOn('reply', (reply: any) => {
+      if ((reply.data?.submission_mode || reply.data?.mode) === 'also') {
+        if (reply.activity?.length) setActivity(current => mergeActivityRecords(current, reply.activity));
+        return;
+      }
+      if (['queued', 'steering_pending'].includes(reply.data?.submission_status)) {
+        setStatus(reply.message || 'Request accepted.');
+        return;
+      }
+      if (reply.data?.history_replace) {
+        updateMessages(reply.history || []);
+        setActivity(reply.activity || []);
+        setStatus(reply.message || 'Ready');
+        return;
+      }
       if (suppressNextReplyRef.current) {
         suppressNextReplyRef.current = false;
         if (reply.activity?.length) {
-          setActivity((current) => [...current, ...(reply.activity || [])].slice(-400));
+          setActivity((current) => mergeActivityRecords(current, reply.activity || []));
         }
         return;
       }
-      setMessages(reply.history || []);
+      updateMessages(current => reconcileChatHistory(reply.command && !reply.command.startsWith('/') ? interruptChatStreams(current) : /error|failed|cancel|stopped/i.test(reply.message || '') ? interruptChatStreams(current) : current, reply.history || []));
       if (reply.activity?.length) {
-        setActivity((current) => [...current, ...(reply.activity || [])].slice(-400));
+        setActivity((current) => mergeActivityRecords(current, reply.activity || []));
       }
       setStatus(reply.message || 'Ready');
     });
@@ -190,8 +222,8 @@ function App() {
     try {
       const next = await State();
       setUi(next);
-      setMessages(next.reply?.history || []);
-      setActivity(next.reply?.activity || []);
+      updateMessages(current => reconcileChatHistory(current, next.reply?.history || []));
+      setActivity(current => mergeActivityRecords(current, next.reply?.activity || []));
       setStatus(next.reply?.message || 'Ready');
     } catch (error: any) {
       setStatus(String(error));
@@ -225,8 +257,9 @@ function App() {
           <div className="loading">Loading NullBot...</div>
         ) : (
           <>
-            {view === 'chat' && (
+            <div className="persistent-chat" hidden={view !== 'chat'}>
               <ChatView
+                active={view === 'chat'}
                 ui={ui}
                 messages={messages}
                 activity={activity}
@@ -238,10 +271,11 @@ function App() {
                 refreshState={refreshState}
                 suppressNextReplyRef={suppressNextReplyRef}
               />
-            )}
-            {view === 'agents' && <AgentsView ui={ui} refreshState={refreshState} />}
+            </div>
+            {view === 'agents' && <AgentsView ui={ui} activity={activity} refreshState={refreshState} />}
+            {view === 'projects' && <ProjectsView load={loadProjects} save={saveProjects} onSaved={() => {setStatus('Projects saved.'); refreshState();}} />}
             {view === 'files' && <FilesView initial={ui.files} refreshState={refreshState} />}
-            {view === 'models' && <ModelsView ui={ui} refreshState={refreshState} />}
+            {view === 'models' && <ModelsView ui={ui} refreshState={refreshState} accountsPanel={<AccountsPanel refreshState={refreshState} />} />}
             {view === 'settings' && <SettingsView ui={ui} refreshState={refreshState} setStatus={setStatus} />}
             {view === 'market' && <MarketplaceView initial={ui.marketplace} refreshState={refreshState} />}
             {view === 'skills' && <SkillsView />}
@@ -302,27 +336,76 @@ function TopBar({ui, status, busy, onRefresh}: {ui: any; status: string; busy: b
   );
 }
 
-function ChatView({messages, activity, busy, setBusy, setMessages, setActivity, setStatus, refreshState, suppressNextReplyRef}: any) {
-  const [input, setInput] = useState('');
-  const [alsoMode, setAlsoMode] = useState(false);
+function ChatView({active, ui, messages, activity, busy, setBusy, setMessages, setActivity, setStatus, refreshState, suppressNextReplyRef}: any) {
+  const {input, setInput, undo, redo, canUndo, canRedo} = useComposerDraft();
+  const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
+  const recallDraft = useRef('');
+  const inputRevision = useRef(0);
+  const [busyChoice, setBusyChoice] = useState(false);
+  const [submissions, setSubmissions] = useState<SubmissionSnapshot>(ui.reply?.data?.submissions || {busy: false, queue: [], jobs: []});
+  const busyTarget = useRef<string | undefined>(undefined);
+  const layout = useChatLayout();
   const [alsoOpen, setAlsoOpen] = useState(false);
   const [alsoItems, setAlsoItems] = useState<any[]>([]);
-  const [attachments, setAttachments] = useState<any[]>([]);
+  const {attachments, queue: attachmentQueue} = useAttachments();
+  const attachmentBlock = attachmentSendBlock(attachments);
   const [dragging, setDragging] = useState(false);
   const [focus, setFocus] = useState('');
   const [promptHistory, setPromptHistory] = useState<string[]>([]);
   const [historyCursor, setHistoryCursor] = useState<number | null>(null);
-  const streamID = useRef(0);
+  const [skills, setSkills] = useState<any[]>([]);
+  const [skillNotice, setSkillNotice] = useState('');
+  useEffect(() => {
+    if (!active) return;
+    Skills().then(setSkills).catch(error => setSkillNotice(String(error)));
+  }, [active]);
+  const skillContext = useSkillContext(input, skills, !!ui.config?.ui?.suggest_matching_skills, !input.trim().startsWith('/'));
 
   useEffect(() => {
+    let disposed = false;
+    let polling = false;
+    async function updateTasks() {
+      if (polling) return;
+      polling = true;
+      try {
+        const snapshot = await chatSubmissionState();
+        if (!disposed) {
+          setSubmissions(snapshot);
+          setBusy(snapshot.busy || !!snapshot.queue?.length);
+          setAlsoItems(current => current.map(item => {
+            const job = snapshot.jobs?.find(job => job.request_id === item.requestID || job.id === item.jobID || job.id === item.taskID);
+            if (!job || !['done', 'error', 'canceled'].includes(job.status)) return item;
+            return {...item, answer: job.reply?.message || job.error || '', status: job.status === 'done' ? 'done' : 'error'};
+          }));
+        }
+      } catch { /* Keep the last known busy state while disconnected. */ }
+      finally {polling = false;}
+    }
+    void updateTasks();
+    const timer = window.setInterval(updateTasks, 1500);
+    const off = EventsOn('reply', (reply: any) => {
+      void updateTasks();
+      if ((reply.data?.submission_mode || reply.data?.mode) !== 'also') return;
+      setAlsoItems(current => current.map(item => {
+        const matches = (reply.data?.request_id && reply.data.request_id === item.requestID) || (reply.data?.submission_id && reply.data.submission_id === item.jobID) || (reply.data?.task_id && reply.data.task_id === item.taskID);
+        return matches ? {...item, answer: reply.message || '', status: ['error', 'canceled', 'rejected'].includes(reply.data?.submission_status) ? 'error' : 'done'} : item;
+      }));
+    });
+    return () => {disposed = true; window.clearInterval(timer); off();};
+  }, []);
+
+  useEffect(() => {
+    if (!active) return;
     OnFileDrop((_x: number, _y: number, paths: string[]) => {
-      attachPaths(paths);
+      void attachmentQueue.stagePaths(paths);
       setDragging(false);
     }, true);
     return () => OnFileDropOff();
-  }, []);
+  }, [active]);
 
   function updateInput(value: string) {
+    inputRevision.current++;
     setInput(value);
     setHistoryCursor(null);
   }
@@ -342,6 +425,7 @@ function ChatView({messages, activity, busy, setBusy, setMessages, setActivity, 
     let next: number | null;
     if (historyCursor === null) {
       if (delta > 0) return;
+      recallDraft.current = input;
       next = promptHistory.length - 1;
     } else {
       const candidate = historyCursor + delta;
@@ -354,16 +438,28 @@ function ChatView({messages, activity, busy, setBusy, setMessages, setActivity, 
       }
     }
     setHistoryCursor(next);
-    setInput(next === null ? '' : promptHistory[next]);
+    inputRevision.current++;
+    setInput(next === null ? recallDraft.current : promptHistory[next]);
   }
 
   function handleComposerKeyDown(event: any) {
+    if (event.nativeEvent?.isComposing || event.isComposing) return;
+    if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+      const key = event.key.toLowerCase();
+      if (key === 'z' || key === 'y') {
+        event.preventDefault();
+        inputRevision.current++;
+        setHistoryCursor(null);
+        if (key === 'y' || event.shiftKey) redo(); else undo();
+      }
+      return;
+    }
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       send();
       return;
     }
-    if (event.key === 'ArrowUp' && !event.shiftKey && (input.trim() === '' || historyCursor !== null)) {
+    if (event.key === 'ArrowUp' && !event.shiftKey && !event.altKey && (input === '' || historyCursor !== null)) {
       event.preventDefault();
       recallPrompt(-1);
       return;
@@ -374,141 +470,105 @@ function ChatView({messages, activity, busy, setBusy, setMessages, setActivity, 
     }
   }
 
-  async function send() {
+  async function send(mode?: ChatMode) {
+    if (sendingRef.current) return;
+    const revision = inputRevision.current;
     const text = input.trim();
-    const sendAttachments = attachments.filter((item) => item.token);
+    const staged = attachmentQueue.snapshot();
+    const blocked = attachmentSendBlock(staged);
+    if (blocked) { setStatus(blocked); return; }
+    const sendAttachments = [...staged];
     if (!text && sendAttachments.length === 0) return;
+    if (!mode && (busy || submissions.busy || submissions.queue?.length)) {busyTarget.current = submissions.primary_id; setBusyChoice(true); return;}
+    const selectedMode = mode || 'normal';
+    setBusyChoice(false);
     const outbound = messageWithAttachmentTokens(text, sendAttachments);
-    rememberPrompt(text);
-    if (alsoMode) {
+    const sendSkills = !text.startsWith('/') ? [...skillContext.paths] : [];
+    const request = makeChatRequest(selectedMode, text, sendAttachments, sendSkills, selectedMode === 'steer' ? busyTarget.current : undefined);
+    setSkillNotice('');
+    sendingRef.current = true;
+    setSending(true);
+    function accepted() {
+      rememberPrompt(text);
+      if (sendSkills.length) setSkillNotice(`Context updated: ${sendSkills.length} skill(s) included in the accepted request.`);
+      if (inputRevision.current === revision) setInput('');
+      attachmentQueue.removeMany(sendAttachments.map(item => item.id));
+    }
+    function finished() { sendingRef.current = false; setSending(false); }
+    if (selectedMode === 'also') {
       const id = `${Date.now()}-${Math.random()}`;
       setAlsoOpen(true);
       setStatus('Also observer working...');
-      setInput('');
-      setAttachments([]);
-      setAlsoItems((current) => [...current, {id, question: text || 'Attached file(s)', attachments: sendAttachments, answer: '', status: 'working', time: new Date().toISOString()}]);
+
+      setAlsoItems((current) => [...current, {id, requestID: request.request_id, question: text || 'Attached file(s)', attachments: sendAttachments, answer: '', status: 'working', time: new Date().toISOString()}]);
       try {
-        const reply = await SendAlso(outbound);
-        setAlsoItems((current) => current.map((item) => item.id === id ? {...item, answer: reply.message || '', status: 'done'} : item));
-        if (reply.activity?.length) setActivity((current: any[]) => [...current, ...(reply.activity || [])].slice(-400));
-        setStatus('Also answer ready.');
+        const reply = await submitChatRequest(request);
+        accepted();
+        setAlsoItems((current) => current.map((item) => item.id === id ? {...item, requestID: reply.data?.request_id || request.request_id, jobID: reply.data?.submission_id || reply.data?.submission?.id, taskID: reply.data?.task_id, answer: reply.data?.background ? item.answer : reply.message || '', status: reply.data?.background ? item.status : 'done'} : item));
+        if (reply.activity?.length) setActivity((current: any[]) => mergeActivityRecords(current, reply.activity || []));
+        setStatus(reply.data?.background ? 'Also observer working...' : 'Also answer ready.');
       } catch (error: any) {
         setAlsoItems((current) => current.map((item) => item.id === id ? {...item, answer: String(error), status: 'error'} : item));
         setStatus(String(error));
-      }
+      } finally { finished(); }
+      return;
+    }
+    if (selectedMode === 'queue' || selectedMode === 'steer') {
+      try {
+        const reply = await submitChatRequest(request);
+        accepted();
+        if (reply.activity?.length) setActivity((current: any[]) => mergeActivityRecords(current, reply.activity || []));
+        setStatus(reply.message || (selectedMode === 'queue' ? 'Queued after current tasks.' : 'Guidance sent to current workers.'));
+      } catch (error: any) {setStatus(String(error));}
+      finally {finished();}
       return;
     }
     const isSlashCommand = text.startsWith('/');
-    const currentStream = ++streamID.current;
     let background = false;
     setStatus('Starting agent task...');
-    setInput('');
-    setAttachments([]);
+
     if (!isSlashCommand) {
       setMessages((current: any[]) => [
         ...current,
-        localMessage('user', outbound, {attachments: sendAttachments}),
-        localMessage('assistant', '', {pending: true}),
+        localMessage('user', outbound, {attachments: sendAttachments, optimisticRequestID: request.request_id}),
+        localMessage('assistant', '', {pending: true, optimisticRequestID: request.request_id}),
       ]);
     }
     try {
-      const reply = await Submit(outbound);
+      const reply = await submitChatRequest(request);
+      accepted();
       background = !!reply.data?.background;
       if (background) {
+        setBusy(true);
         setStatus(reply.message || 'Agent task started.');
         return;
       }
       if (isSlashCommand) {
         setMessages(reply.history || []);
       } else {
-        await revealReply(reply, currentStream);
+        setMessages(reply.history || []);
       }
-      if (reply.activity?.length) setActivity((current: any[]) => [...current, ...(reply.activity || [])].slice(-400));
+      if (reply.activity?.length) setActivity((current: any[]) => mergeActivityRecords(current, reply.activity || []));
       setStatus(isSlashCommand ? (reply.message || 'Ready') : 'Response complete.');
     } catch (error: any) {
       if (!isSlashCommand) suppressNextReplyRef.current = false;
       if (!isSlashCommand) {
         setMessages((current: any[]) => [
-          ...current.filter((message) => !message.pending),
+          ...current.filter((message) => message.optimisticRequestID !== request.request_id),
           localMessage('assistant', String(error), {roleClass: 'error'}),
         ]);
       }
       setStatus(String(error));
     } finally {
+      finished();
       if (!background) {
-        setBusy(false);
         refreshState();
       }
     }
   }
 
-  async function revealReply(reply: any, currentStream: number) {
-    const history = reply.history || [];
-    if (history.length === 0) {
-      setMessages([]);
-      return;
-    }
-    const last = history[history.length - 1];
-    if ((last.role || '').toLowerCase() !== 'assistant') {
-      setMessages(history);
-      return;
-    }
-    const base = history.slice(0, -1);
-    const full = String(last.content || '');
-    const chunkSize = Math.max(12, Math.ceil(full.length / 140));
-    setMessages([...base, {...last, content: '', pending: true}]);
-    for (let index = chunkSize; index < full.length; index += chunkSize) {
-      if (streamID.current !== currentStream) return;
-      setMessages([...base, {...last, content: full.slice(0, index), streaming: true}]);
-      await sleep(16);
-    }
-    if (streamID.current === currentStream) {
-      setMessages(history);
-    }
-  }
-
-  async function attachPaths(paths: string[]) {
-    const clean = (paths || []).filter(Boolean);
-    if (clean.length === 0) return;
-    setStatus('Attaching files...');
-    try {
-      const next = await AttachFiles(clean);
-      setAttachments((current) => mergeAttachments(current, next));
-      const ok = next.filter((item: any) => item.token).length;
-      const failed = next.length - ok;
-      setStatus(failed ? `Attached ${ok}, ${failed} failed.` : `Attached ${ok} file(s).`);
-    } catch (error: any) {
-      setStatus(String(error));
-    }
-  }
-
-  async function handlePaste(event: any) {
-    const files = Array.from(event.clipboardData?.files || []) as File[];
-    if (files.length > 0 && CanResolveFilePaths()) {
-      event.preventDefault();
-      setStatus('Resolving pasted file(s)...');
-      (window as any).runtime?.ResolveFilePaths?.(event.clientX || 0, event.clientY || 0, files);
-      return;
-    }
-    const text = event.clipboardData?.getData('text/plain') || '';
-    if (text.trim()) {
-      try {
-        const next = await AttachTextPaths(text);
-        if (next?.length) {
-          event.preventDefault();
-          setAttachments((current) => mergeAttachments(current, next));
-          setStatus(`Attached ${next.filter((item: any) => item.token).length} file(s).`);
-        } else {
-          setStatus('Pasted into composer.');
-        }
-      } catch (error: any) {
-        setStatus(String(error));
-      }
-    }
-  }
-
-  function removeAttachment(path: string) {
-    setAttachments((current) => current.filter((item) => item.path !== path));
+  function handlePaste(event: any) {
+    handleAttachmentPaste(event, files => { void attachmentQueue.stageFiles(files); }, paths => { void attachmentQueue.stagePaths(paths); });
   }
 
   async function runAnalyze() {
@@ -542,7 +602,7 @@ function ChatView({messages, activity, busy, setBusy, setMessages, setActivity, 
     setBusy(true);
     try {
       const reply = await CompactConversation(focus);
-      setMessages(reply.history || []);
+      setMessages(() => reply.history || []);
       setStatus(reply.message);
       setFocus('');
     } finally {
@@ -569,8 +629,7 @@ function ChatView({messages, activity, busy, setBusy, setMessages, setActivity, 
   async function clearChat() {
     if (busy) return;
     if (messages.length > 0 && !window.confirm('Clear visible chat history? Saved sessions will not be deleted.')) return;
-    setInput('');
-    setAttachments([]);
+
     setMessages([]);
     try {
       const reply = await Command('/clear');
@@ -584,7 +643,8 @@ function ChatView({messages, activity, busy, setBusy, setMessages, setActivity, 
   return (
     <section
       className={`chat-grid ${dragging ? 'dragging-files' : ''}`}
-      style={{'--wails-drop-target': 'drop'} as any}
+      ref={layout.container}
+      style={{'--wails-drop-target': 'drop', '--activity-width': `${layout.activityWidth}px`, '--composer-height': `${layout.composerHeight}px`} as any}
       onDragEnter={(event) => {
         if (event.dataTransfer?.types?.includes('Files')) setDragging(true);
       }}
@@ -600,38 +660,43 @@ function ChatView({messages, activity, busy, setBusy, setMessages, setActivity, 
         <div className="drop-overlay">
           <Files size={30} />
           <strong>Drop files to attach</strong>
-          <span>Images are sent directly; other files are attached for tool inspection.</span>
+          <span>Files are staged locally. Nothing is sent to the model until you press Send.</span>
         </div>
       )}
-      <div className="chat-main">
+      <div className="chat-main" id="chat-main">
         <MessageList messages={messages} />
         {alsoOpen && (
           <AlsoDrawer
             items={alsoItems}
-            active={alsoMode}
             onClose={() => setAlsoOpen(false)}
             onClear={() => setAlsoItems([])}
-            onActivate={() => setAlsoMode(true)}
           />
         )}
-        <div className="composer">
-          <textarea
+        <div className="composer" id="message-composer">
+          <ResizeHandle axis="composer" value={layout.composerHeight} {...layout.composerBounds} onChange={value => layout.change('composer', value)} />
+          {!!submissions.queue?.length && <details className="queued-requests"><summary>{submissions.queue.length} request(s) queued after current tasks</summary><ol>{submissions.queue.map(job => <li key={job.id}><span>{job.input || job.id}</span><button type="button" aria-label={`Remove queued request: ${job.input || job.id}`} onClick={async () => {try {setSubmissions(await removeQueuedChat(job.id)); setStatus('Queued request removed.');} catch (error) {setStatus(String(error));}}}>Remove</button></li>)}</ol></details>}
+          <SkillContextNotice matches={skillContext.matches} dismiss={skillContext.dismiss} />
+          {skillNotice && <small role="status">{skillNotice}</small>}
+          <SkillComposer
+            matches={skillContext.matches}
+            aria-label="Message NullBot"
             value={input}
             onChange={(event) => updateInput(event.target.value)}
             onPaste={handlePaste}
             onKeyDown={handleComposerKeyDown}
-            placeholder={alsoMode ? 'Ask a side-channel /also question' : 'Message NullBot or type a slash command'}
+            placeholder="Message NullBot or type a slash command"
           />
-          {attachments.length > 0 && <AttachmentTray attachments={attachments} onRemove={removeAttachment} />}
+          {attachments.length > 0 && <AttachmentTray attachments={attachments} onRemove={attachmentQueue.remove} />}
+          {attachmentBlock && <small className="attachment-send-block" role="status">{attachmentBlock}</small>}
+          <div className="composer-hint">Enter to send  /  Shift+Enter for a new line  /  Empty Up recalls prompts  /  Ctrl/Cmd+Z undo</div>
           <div className="composer-actions">
-            <button className={alsoMode ? 'seg active' : 'seg'} onClick={() => {
-              const next = !alsoMode;
-              setAlsoMode(next);
-              if (next) setAlsoOpen(true);
-            }}>
+            <button disabled={!canUndo} onClick={() => { inputRevision.current++; setHistoryCursor(null); undo(); }} title="Undo (Ctrl/Cmd+Z)">Undo</button>
+            <button disabled={!canRedo} onClick={() => { inputRevision.current++; setHistoryCursor(null); redo(); }} title="Redo (Ctrl+Y / Cmd+Shift+Z)">Redo</button>
+            <button className="also-action" onClick={() => send('also')} disabled={sending || !!attachmentBlock || (!input.trim() && attachments.length === 0)} title="Send this draft as an Also side question">
               <Layers size={16} />
               Also
             </button>
+            {alsoItems.length > 0 && <button className="also-action" onClick={() => setAlsoOpen(true)}>Also answers ({alsoItems.length})</button>}
             <input value={focus} onChange={(event) => setFocus(event.target.value)} placeholder="Optional focus" />
             <button onClick={runAnalyze}>
               <Compass size={16} />
@@ -661,19 +726,21 @@ function ChatView({messages, activity, busy, setBusy, setMessages, setActivity, 
               <Trash2 size={16} />
               Clear Chat
             </button>
-            <button className="primary" onClick={send}>
+            <button className="primary" onClick={() => send()} disabled={sending || !!attachmentBlock || (!input.trim() && attachments.length === 0)}>
               <Send size={16} />
               Send
             </button>
           </div>
         </div>
       </div>
+      <ResizeHandle axis="activity" value={layout.activityWidth} {...layout.activityBounds} onChange={value => layout.change('activity', value)} />
       <LiveActivity activity={activity} />
+      {busyChoice && <BusySendDialog onChoose={mode => {void send(mode);}} onCancel={() => setBusyChoice(false)} />}
     </section>
   );
 }
 
-function AlsoDrawer({items, active, onClose, onClear, onActivate}: {items: any[]; active: boolean; onClose: () => void; onClear: () => void; onActivate: () => void}) {
+function AlsoDrawer({items, onClose, onClear}: {items: any[]; onClose: () => void; onClear: () => void}) {
   const ref = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     ref.current?.scrollTo({top: ref.current.scrollHeight});
@@ -683,10 +750,9 @@ function AlsoDrawer({items, active, onClose, onClear, onActivate}: {items: any[]
       <div className="also-head">
         <div>
           <h2>Also Observer</h2>
-          <span>{active ? 'Side-channel mode is active' : 'Side-channel answers stay here'}</span>
+          <span>Side-channel answers stay here. Also sends the main draft directly.</span>
         </div>
         <div className="row-actions">
-          {!active && <button onClick={onActivate}><Layers size={16} /> Use Also</button>}
           <button onClick={onClear} disabled={items.length === 0}>Clear</button>
           <button onClick={onClose}>Close</button>
         </div>
@@ -713,45 +779,35 @@ function AlsoDrawer({items, active, onClose, onClear, onActivate}: {items: any[]
   );
 }
 
-function AttachmentTray({attachments, onRemove, readonly = false}: {attachments: any[]; onRemove?: (path: string) => void; readonly?: boolean}) {
-  return (
-    <div className="attachment-tray">
-      {attachments.map((attachment) => (
-        <div className={`attachment-chip ${attachment.error ? 'error' : ''}`} key={attachment.path || attachment.original_path || attachment.name}>
-          <Files size={15} />
-          <div>
-            <strong>{attachment.name || attachment.path}</strong>
-            <span>{attachment.error || `${attachment.kind || 'file'}${attachment.size ? ` / ${formatBytes(attachment.size)}` : ''}`}</span>
-          </div>
-          {!readonly && onRemove && (
-            <button onClick={() => onRemove(attachment.path)} title="Remove attachment">
-              <CircleStop size={14} />
-            </button>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function MessageList({messages}: {messages: any[]}) {
   const ref = useRef<HTMLDivElement | null>(null);
+  const follow = useRef(true);
+  // Disclosure preferences outlive a live block being replaced by a durable row.
+  // In-memory only: no summary text or preferences are written to storage.
+  const disclosures = useRef(new Map<string, boolean>());
   useEffect(() => {
-    ref.current?.scrollTo({top: ref.current.scrollHeight});
+    followTranscript(ref.current, follow.current);
   }, [messages]);
+  const summaryDisclosure = (key: string, text: string, label: string, initiallyOpen = false) => (
+    <details className="chat-reasoning" key={key} open={rememberSummaryOpen(disclosures.current, key, initiallyOpen)} onToggle={event => {disclosures.current.set(key, event.currentTarget.open);}}>
+      <summary>{label}</summary><MarkdownContent>{text}</MarkdownContent>
+    </details>
+  );
   return (
-    <div className="message-list" ref={ref}>
+    <div className="message-list" ref={ref} onScroll={event => {follow.current = isTranscriptNearBottom(event.currentTarget);}}>
       {messages.length === 0 && <div className="empty-state">Start a conversation or use a sidebar control.</div>}
-      {messages.map((message, index) => {
+      {identifyChatMessages(messages).map(message => {
         const visible = messageWithVisibleAttachments(message);
         return (
-          <article key={`${message.time}-${index}`} className={`message ${message.role || 'assistant'}`}>
-            <div className="message-role">{message.role || 'assistant'}</div>
+          <article key={message.transcriptKey} className={`message ${message.role || 'assistant'}`}>
+            <div className="message-role">{message.role || 'assistant'} {message.streamState === 'incomplete' ? '— Incomplete response' : message.pending ? '— Streaming' : ''}</div>
+            {message.summaries?.map((summary: string, i: number) => summaryDisclosure(message.summaryKeys?.[i] || `${message.transcriptKey}:summary:${i}`, summary, `Reasoning summary ${i + 1}`, !!message.pending))}
+            {message.commentary?.map((comment: string, i: number) => <div className="chat-commentary" key={i}><small>Public commentary</small><MarkdownContent>{comment}</MarkdownContent></div>)}
             {message.pending && !message.content ? (
               <span className="loading-inline"><span className="spinner" /> Working...</span>
             ) : (
               <>
-                <MarkdownContent>{visible.content || ''}</MarkdownContent>
+                {message.role === 'reasoning' ? summaryDisclosure(message.summaryKey || `${message.transcriptKey}:summary`, visible.content || '', `Reasoning summary${message.agent_id ? ` · ${message.agent_id}` : ''}`) : <MarkdownContent>{visible.content || ''}</MarkdownContent>}
                 {visible.attachments.length > 0 && <AttachmentTray attachments={visible.attachments} readonly />}
               </>
             )}
@@ -768,9 +824,9 @@ function LiveActivity({activity}: {activity: any[]}) {
   const running = items.filter((item) => item.state === 'running').length;
   useEffect(() => {
     ref.current?.scrollTo({top: ref.current.scrollHeight});
-  }, [items.length]);
+  }, [activity]);
   return (
-    <aside className="activity-pane">
+    <aside className="activity-pane" id="live-activity">
       <div className="pane-title activity-title">
         <div>
           <Activity size={18} />
@@ -779,7 +835,7 @@ function LiveActivity({activity}: {activity: any[]}) {
         <small>{running ? `${running} running` : `${items.length} recent`}</small>
       </div>
       <div className="activity-feed" ref={ref}>
-        {items.length === 0 && <div className="empty-state small">No activity yet.</div>}
+        {items.length === 0 && <div className="empty-state small">Tool calls and reasoning checkpoints appear here.</div>}
         {items.map((item) => <ActivityCard key={item.id} item={item} />)}
       </div>
     </aside>
@@ -789,16 +845,16 @@ function LiveActivity({activity}: {activity: any[]}) {
 function ActivityCard({item}: {item: any}) {
   const Icon = activityIcon(item);
   return (
-    <article className={`activity-card ${item.kind} ${item.state}`}>
+    <article className={`activity-card ${item.kind} ${item.state} ${item.also ? 'also-activity' : ''}`}>
       <div className="activity-icon">
         {item.state === 'running' ? <span className="spinner" /> : <Icon size={16} />}
       </div>
       <div className="activity-body">
         <div className="activity-head">
-          <strong>{item.title}</strong>
+          <strong>{item.also && <span className="also-badge">Also · </span>}{item.title}</strong>
           <time>{formatTime(item.time)}</time>
         </div>
-        <p>{item.subtitle}</p>
+        {item.kind === 'reasoning' ? <details className="reasoning-reference"><summary>Provider summary · {item.subtitle.length} characters</summary><MarkdownContent>{item.subtitle}</MarkdownContent></details> : <p>{item.subtitle}</p>}{item.agent && <small>Agent: {item.agent}</small>}{item.kind === 'tool' && <small className="tool-name">{item.name}  /  {item.state}</small>}
         {item.chips.length > 0 && (
           <div className="activity-chips">
             {item.chips.map((chip: string) => <span key={chip}>{chip}</span>)}
@@ -806,7 +862,7 @@ function ActivityCard({item}: {item: any}) {
         )}
         {item.raw && (
           <details className="activity-raw">
-            <summary>details</summary>
+            <summary>{item.kind === 'tool' ? 'Arguments / result' : 'Event details'}</summary>
             <pre>{item.raw}</pre>
           </details>
         )}
@@ -815,7 +871,7 @@ function ActivityCard({item}: {item: any}) {
   );
 }
 
-function AgentsView({ui, refreshState}: {ui: any; refreshState: () => void}) {
+function AgentsView({ui, activity, refreshState}: {ui: any; activity: any[]; refreshState: () => void}) {
   const [tab, setTab] = useState('combined');
   const [tasks, setTasks] = useState<any[]>(ui.tasks || []);
   const [thoughts, setThoughts] = useState<any[]>(ui.thoughts || []);
@@ -868,6 +924,7 @@ function AgentsView({ui, refreshState}: {ui: any; refreshState: () => void}) {
           ))}
         </div>
         <div className="thought-panel">
+          <LiveActivity activity={activity.filter(record => tab === 'combined' || visible.some(task => record.task_id === task.id || record.agent_id === task.name || record.agent_id === task.id))} />
           <div className="panel-copy">
             <h2>Reasoning Summaries</h2>
             <p>Provider-private reasoning is not exposed. This view shows available summaries, task progress, tool intent, token use, and errors.</p>
@@ -1209,77 +1266,6 @@ function FileContextMenu({x, y, entry, onNewFile, onNewDirectory, onRename, onDe
   );
 }
 
-function ModelsView({ui, refreshState}: {ui: any; refreshState: () => void}) {
-  const [tab, setTab] = useState('models');
-  const [target, setTarget] = useState('manager');
-  const [groups, setGroups] = useState<any[]>(ui.models || []);
-  const [provider, setProvider] = useState(ui.config?.model?.provider || 'openai');
-  const [query, setQuery] = useState('');
-  const [loading, setLoading] = useState(false);
-  useEffect(() => {
-    setLoading(true);
-    Models().then(setGroups).finally(() => setLoading(false));
-  }, []);
-
-  async function choose(provider: string, model: string) {
-    setLoading(true);
-    await SetModel(provider, model, target);
-    refreshState();
-    setLoading(false);
-  }
-
-  const providers = groups.map((group) => group.provider);
-  const selected = groups.find((group) => group.provider === provider) || groups[0];
-  const models = (selected?.models || []).filter((model: any) => {
-    const hay = `${model.name || ''} ${model.id || ''} ${model.description || ''}`.toLowerCase();
-    return hay.includes(query.toLowerCase());
-  });
-  const currentManager = `${ui.config?.model?.provider}/${ui.config?.model?.model}`;
-  const currentSubagent = `${ui.config?.subagent_model?.provider}/${ui.config?.subagent_model?.model}`;
-
-  return (
-    <section className="view-column">
-      <StickyTabs tabs={['models', 'accounts']} active={tab} onSelect={setTab} labelFor={(value: string) => value === 'models' ? 'Models' : 'Accounts'} />
-      {tab === 'accounts' ? (
-        <AccountsPanel refreshState={refreshState} />
-      ) : (
-        <>
-          <div className="model-toolbar">
-            <Segmented value={target} values={['manager', 'subagent', 'both']} onChange={setTarget} />
-            <div className="provider-tabs">
-              {providers.map((item) => <button key={item} className={item === provider ? 'active' : ''} onClick={() => setProvider(item)}>{item}</button>)}
-            </div>
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search models" />
-          </div>
-          <div className="dashboard-row">
-            <Stat title="Manager" value={currentManager} />
-            <Stat title="Subagent" value={currentSubagent} />
-            <Stat title="Apply To" value={target} />
-          </div>
-          {loading && <div className="loading-inline"><span className="spinner" /> Loading models...</div>}
-          {selected?.error && <p className="warn">{selected.error}</p>}
-          <div className="model-list">
-            {models.map((model: any) => {
-              const key = `${selected.provider}/${model.id}`;
-              const active = key === currentManager || key === currentSubagent;
-              return (
-                <button key={key} className={active ? 'selected' : ''} onClick={() => choose(selected.provider, model.id)}>
-                  <div>
-                    <strong>{model.name || model.id}</strong>
-                    <span>{model.id}</span>
-                  </div>
-                  <p>{model.description}</p>
-                  <small>{model.reasoning ? 'reasoning' : 'standard'}{model.responses ? ' / responses' : ''}</small>
-                </button>
-              );
-            })}
-          </div>
-        </>
-      )}
-    </section>
-  );
-}
-
 function AccountsPanel({refreshState, setStatus}: {refreshState: () => void; setStatus?: (value: string) => void}) {
   const [state, setState] = useState<any>(null);
   const [keys, setKeys] = useState<any>({openai: '', anthropic: '', openrouter: '', google: '', brave: '', otherProvider: '', otherKey: ''});
@@ -1571,6 +1557,8 @@ function SettingsView({ui, refreshState, setStatus}: {ui: any; refreshState: () 
       </div>
       <div className="settings-panel">
         <h2>Skills & Permissions</h2>
+        <label className="checkline block"><input type="checkbox" checked={!!config.ui?.suggest_matching_skills} onChange={event => update('ui.suggest_matching_skills', event.target.checked)} /> Suggest matching skills</label>
+        <p className="muted">Matching words glow in chat. The skill named in the ⚡ bubble is automatically included when you send; dismiss its bubble to skip it. Applies to normal chat only.</p>
         <label>Skill directories</label>
         <textarea className="short-textarea" value={(config.skill_dirs || []).join('\n')} onChange={(e) => update('skill_dirs', e.target.value.split('\n').map((v) => v.trim()).filter(Boolean))} />
         {['coding', 'shell', 'network'].map((key) => (
@@ -1816,7 +1804,7 @@ function MCPView({ui, refreshState}: {ui: any; refreshState: () => void}) {
   );
 }
 
-function HistoryView({refreshState, setMessages}: {refreshState: () => void; setMessages: (messages: any[]) => void}) {
+function HistoryView({refreshState, setMessages}: {refreshState: () => void; setMessages: (messages: any[] | ((current: any[]) => any[])) => void}) {
   const [sessions, setSessions] = useState<any[]>([]);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<any[]>([]);
@@ -1844,7 +1832,7 @@ function HistoryView({refreshState, setMessages}: {refreshState: () => void; set
   async function loadSelected() {
     if (!selectedSession) return;
     const reply = await LoadSession(selectedSession.session_id, 80);
-    setMessages(reply.history || []);
+    setMessages(() => reply.history || []);
     refreshState();
   }
 
@@ -2695,9 +2683,26 @@ function labelAgentTab(value: string) {
 function buildActivityTimeline(records: any[]) {
   const items: any[] = [];
   const runningByTool: Record<string, number[]> = {};
+  const seen = new Set<string>();
   for (const [index, record] of (records || []).entries()) {
-    const status = String(record.status || '');
-    const name = String(record.name || record.kind || 'event');
+    if (!isPublicRecord(record)) continue;
+    const status = streamStatus(record);
+    if (status === 'response delta' || status === 'model start') continue;
+    if (!['tool start', 'tool complete', 'tool error', 'reasoning delta', 'reasoning', 'agent complete', 'model error', 'submission running', 'submission done', 'submission error', 'submission canceled', 'instruction applied', 'instruction rejected'].includes(status)) continue;
+    const fingerprint = JSON.stringify(record);
+    if (status !== 'reasoning delta' && seen.has(fingerprint)) continue;
+    seen.add(fingerprint);
+    if (status === 'reasoning delta' || status === 'reasoning') {
+      const last = items[items.length - 1];
+      const existing = last?.kind === 'reasoning' && last.agent === String(record.agent_id || record.agent || record.task_id || '') && last.runID === (record.run_id || '') && last.submissionID === (record.submission_id || '') && last.also === isAlsoRecord(record) ? last : undefined;
+      if (existing) existing.subtitle += record.detail || '';
+      else {const item = makeActivityItem(record, index); items.push(item);}
+      continue;
+    }
+    if (status === 'agent complete' || status === 'model error') {
+      for (const item of items) if (item.agent === String(record.agent_id || record.task_id || '') && item.runID === (record.run_id || '') && item.kind === 'reasoning') item.state = status === 'model error' ? 'error' : 'complete';
+    }
+    const name = JSON.stringify([record.submission_id || '', record.lane || '', record.agent_id || record.agent || record.task_id || '', record.run_id || record.call_id || record.tool_call_id || '', record.name || record.kind || 'event']);
     if (status === 'tool start') {
       const item = makeActivityItem(record, index);
       items.push(item);
@@ -2706,15 +2711,19 @@ function buildActivityTimeline(records: any[]) {
     }
     if (status === 'tool complete' || status === 'tool error') {
       const stack = runningByTool[name] || [];
-      const itemIndex = stack.pop();
+      const itemIndex = stack.shift();
       if (itemIndex !== undefined) {
         const item = items[itemIndex];
         item.state = status === 'tool error' ? 'error' : 'complete';
+        item.title = status === 'tool error' ? `${humanizeID(item.name)} failed` : `Completed ${humanizeID(item.name)}`;
         item.endedAt = record.time;
         item.subtitle = status === 'tool error'
           ? cleanActivityDetail(record.detail) || 'Tool failed'
           : `Completed${formatDuration(item.time, record.time)}`;
-        item.raw = item.raw || cleanActivityDetail(record.detail);
+        const result = cleanActivityDetail(record.detail);
+        item.raw = [item.raw ? `Arguments / start:
+${item.raw}` : '', result ? `Result:
+${result}` : ''].filter(Boolean).join('\n\n');
         continue;
       }
     }
@@ -2724,50 +2733,69 @@ function buildActivityTimeline(records: any[]) {
 }
 
 function makeActivityItem(record: any, index: number) {
-  const status = String(record.status || '');
+  const status = streamStatus(record);
   const args = activityArgs(record.detail);
   const tool = friendlyToolCall(record);
   const item = {
     id: `${record.time || index}-${index}-${record.name || record.kind || status}`,
     time: record.time,
+    runID: record.run_id || '',
+    submissionID: record.submission_id || '',
+    also: isAlsoRecord(record),
     name: record.name || record.kind || 'event',
+    agent: String(record.agent_id || record.agent || record.task_id || ''),
     kind: activityKind(status),
     state: activityState(status),
-    title: tool.title,
+    title: status === 'tool start' ? 'Running ' + humanizeID(String(record.name || 'tool')) : tool.title,
     subtitle: tool.subtitle,
     chips: activityChips(args, record.detail),
     raw: Object.keys(args).length > 0 ? JSON.stringify(args, null, 2) : cleanActivityDetail(record.detail),
   };
-  if (status === 'model start') {
+  if (status === 'response delta' || status === 'reasoning delta') {
+    item.title = status === 'response delta' ? 'Response in chat' : 'Provider reasoning summary';
+    item.subtitle = status === 'response delta' ? '' : record.detail || '';
+    item.raw = '';
+    item.chips = [];
+  } else if (status === 'model start') {
     item.title = 'Model call started';
     item.subtitle = cleanActivityDetail(record.detail) || 'Preparing a response';
   } else if (status === 'agent complete') {
-    item.title = 'Agent completed turn';
-    item.subtitle = cleanActivityDetail(record.detail) || 'Ready for the next step';
+    item.title = 'Work Complete';
+    item.subtitle = 'Agent finished successfully';
     item.raw = '';
+    item.chips = [];
+  } else if (status.startsWith('submission ') || status.startsWith('instruction ')) {
+    item.title = humanizeID(status);
+    item.subtitle = status.startsWith('instruction ') ? cleanActivityDetail(record.detail) : (isAlsoRecord(record) ? 'Independent side task' : 'Primary task');
+    item.raw = '';
+    item.chips = [];
   } else if (status === 'reasoning') {
     item.title = 'Reasoning summary';
     item.subtitle = cleanActivityDetail(record.detail) || 'Provider-visible reasoning summary received';
     item.raw = '';
   } else if (status === 'model error') {
     item.title = 'Model error';
-    item.subtitle = cleanActivityDetail(record.detail) || 'The model call failed';
-  }
-  if (status === 'tool complete' && !Object.keys(args).length) {
+    item.subtitle = 'Run interrupted. Partial response retained in chat.';
     item.raw = '';
+    item.chips = [];
   }
+
   return item;
 }
 
 function activityKind(status: string) {
   if (status.startsWith('tool')) return 'tool';
   if (status.startsWith('model')) return 'model';
-  if (status === 'reasoning') return 'reasoning';
+  if (status === 'reasoning' || status === 'reasoning delta') return 'reasoning';
+  if (status === 'response delta') return 'response';
   if (status.startsWith('agent')) return 'agent';
   return 'event';
 }
 
 function activityState(status: string) {
+  if (status.endsWith('running') || status.endsWith('delta')) return 'running';
+  if (status.endsWith('done') || status.endsWith('applied')) return 'complete';
+  if (status.endsWith('canceled') || status.endsWith('rejected')) return 'error';
   if (status.endsWith('start')) return 'running';
   if (status.includes('error')) return 'error';
   if (status.includes('complete') || status === 'agent complete') return 'complete';
@@ -2784,7 +2812,7 @@ function activityIcon(item: any) {
 }
 
 function friendlyToolCall(record: any) {
-  const status = String(record.status || '');
+  const status = streamStatus(record);
   const args = activityArgs(record.detail);
   const name = String(record.name || 'tool');
   const state = activityState(status);
@@ -2994,8 +3022,8 @@ function messageWithAttachmentTokens(text: string, attachments: any[]) {
 function mergeAttachments(current: any[], incoming: any[]) {
   const out = [...(current || [])];
   for (const item of incoming || []) {
-    const key = item.path || item.original_path || item.name;
-    if (!key || out.some((existing) => (existing.path || existing.original_path || existing.name) === key)) continue;
+    const key = String(item.path || item.original_path || item.name || '').replace(/\\/g, '/');
+    if (!key || out.some((existing) => String(existing.path || existing.original_path || existing.name || '').replace(/\\/g, '/') === key)) continue;
     out.push(item);
   }
   return out;
@@ -3132,3 +3160,159 @@ function statusClass(status: string) {
 }
 
 export default App;
+
+// Preserve contiguous provider chunks before the bounded activity buffer is trimmed.
+function mergeActivityRecords(current: any[], incoming: any[], live = false) {
+  // Deltas enter once via activity; snapshots must not replay answer fragments.
+  const result = [...current];
+  const seen = new Set(result.map(record => JSON.stringify(record)));
+  for (const record of incoming) {
+    if (!isPublicRecord(record)) continue;
+    const status = streamStatus(record);
+    if (status === 'response delta') continue;
+    const fingerprint = JSON.stringify(record);
+    if ((!live || status !== 'reasoning delta') && seen.has(fingerprint)) continue;
+    seen.add(fingerprint);
+    result.push(record);
+  }
+  // Reasoning has its own unbounded live buffer; ordinary diagnostics stay bounded.
+  let ordinary = 0;
+  const discard = Math.max(0, result.filter(item => !streamStatus(item).startsWith('reasoning')).length - 400);
+  return result.filter(record => streamStatus(record).startsWith('reasoning') || ++ordinary > discard);
+}
+
+function suggestSkillMatches(input: string, skills: any[]) {
+  const words = input.toLowerCase().match(/[a-z0-9-]{3,}/g) || [];
+  const ignored = new Set(['the', 'and', 'for', 'with', 'this', 'that', 'please', 'use']);
+  return skills.filter(skill => words.some(word => !ignored.has(word) && (String(skill.name || '') + ' ' + String(skill.description || '')).toLowerCase().includes(word))).slice(0, 5);
+}
+
+function streamStatus(record: any) {
+  return ({on_llm_new_token: 'response delta', on_llm_reasoning: 'reasoning delta', on_llm_commentary: 'commentary', on_llm_end: 'agent complete', on_llm_error: 'model error', on_chat_model_start: 'model start'} as any)[record.kind] || record.status || '';
+}
+
+function isAlsoRecord(record: any) {
+  return record.lane === 'also' || record.mode === 'also' || record.source === 'also' || record.role === 'also' || /^(also|observer)(?:$|[-:/])/i.test(String(record.agent_id || record.agent || record.task_id || ''));
+}
+
+function isPublicRecord(record: any) {
+  return record.private !== true && record.visibility !== 'private' && record.channel !== 'analysis' && !/private|raw_reasoning|chain_of_thought/i.test(String(record.kind || ''));
+}
+
+function ingestChatStream(messages: any[], record: any) {
+  if (!isPublicRecord(record) || isAlsoRecord(record) || record.agent_id !== 'main' || record.parent_run_id || !record.run_id) return messages;
+  const status = streamStatus(record);
+  if (!['response delta', 'commentary delta', 'commentary', 'reasoning delta', 'reasoning', 'agent complete', 'model error', 'model start'].includes(status)) return messages;
+  const key = [record.submission_id || '', record.agent_id, record.run_id].join(':');
+  const previous = messages.find(message => message.streamKey === key);
+  if (!previous && ['agent complete', 'model error'].includes(status)) return messages;
+  const item = {...(previous || {role: 'assistant', content: '', summaries: [], commentary: [], time: record.time, run_id: record.run_id, submission_id: record.submission_id, streamKey: key, historyAnchor: messages.filter(message => message.role === 'assistant' && !message.streamKey && !message.pending).length}), summaries: [...(previous?.summaries || [])], commentary: [...(previous?.commentary || [])]};
+  const text = String(record.detail || '');
+  if (status === 'response delta' && record.channel !== 'commentary') item.content += text;
+  if (status === 'commentary delta' || status === 'commentary' || (status === 'response delta' && record.channel === 'commentary')) {
+    const last = item.commentary.length - 1;
+    if (last >= 0 && item.lastChannel === 'commentary' && status !== 'commentary') item.commentary[last] += text;
+    else item.commentary.push(text);
+    item.lastChannel = 'commentary';
+  } else if (status === 'reasoning delta' || status === 'reasoning') {
+    const last = item.summaries.length - 1;
+    if (last >= 0 && !item.newRound && status !== 'reasoning') item.summaries[last] += text;
+    else item.summaries.push(text);
+    item.newRound = false;
+    item.lastChannel = 'summary';
+  } else if (status === 'model start') {
+    // A subsequent model round follows public tool commentary. Keep it even if
+    // persisted history contains only the final model answer.
+    if (item.content) {item.commentary.push(item.content); item.content = '';}
+    item.newRound = true;
+    item.lastChannel = '';
+  } else item.lastChannel = 'response';
+  item.pending = status !== 'agent complete' && status !== 'model error';
+  item.streamState = status === 'model error' ? 'incomplete' : status === 'agent complete' ? 'complete' : 'streaming';
+  let nextSummaryID = previous?.nextSummaryID ?? previous?.summaries?.length ?? 0;
+  item.summaryKeys = item.summaries.map((_: string, index: number) => item.summaryKeys?.[index] || `stream:${key}:0:summary:${nextSummaryID++}`);
+  item.nextSummaryID = nextSummaryID;
+  return previous ? messages.map(message => message === previous ? item : message) : [...messages.filter(message => !message.pending || message.streamKey), item];
+}
+
+function isTranscriptNearBottom(element: {scrollHeight: number; scrollTop: number; clientHeight: number}) {
+  return element.scrollHeight - element.scrollTop - element.clientHeight <= 80;
+}
+
+function followTranscript(element: {scrollHeight: number; scrollTo: (options: {top: number}) => void} | null, follow: boolean) {
+  if (element && follow) element.scrollTo({top: element.scrollHeight});
+}
+
+function rememberSummaryOpen(states: Map<string, boolean>, key: string, initiallyOpen: boolean) {
+  if (!states.has(key)) states.set(key, initiallyOpen);
+  return states.get(key)!;
+}
+
+function identifyChatMessages(messages: any[]) {
+  const occurrences = new Map<string, number>();
+  return messages.map(message => {
+    // Scope ordinals to a message identity, not its position in the transcript.
+    // Content is only a fallback for old histories without IDs or timestamps.
+    const base = message.streamKey ? `stream:${message.streamKey}` : JSON.stringify([
+      message.lane || 'primary', message.submission_id || '', message.run_id || '',
+      message.agent_id || '', message.task_id || '', message.role || 'assistant',
+      message.id || message.optimisticRequestID || message.time || '',
+      message.id || message.optimisticRequestID || message.time || message.submission_id || message.run_id ? '' : message.content || '',
+    ]);
+    const ordinal = occurrences.get(base) || 0;
+    occurrences.set(base, ordinal + 1);
+    return {...message, transcriptKey: message.transcriptKey || `${base}:${ordinal}`};
+  });
+}
+
+function reconcileChatHistory(current: any[], history: any[]) {
+  // Empty refresh snapshots are not explicit Clear actions (those bypass this helper).
+  if (!history.length) return current.filter(message => !message.pending || message.streamKey);
+  const previousRows = identifyChatMessages(current);
+  const previousByKey = new Map(previousRows.filter(message => !message.streamKey).map(message => [message.historyKey || message.transcriptKey, message]));
+  const result = identifyChatMessages(history.filter(isPublicRecord).filter(message => !isAlsoRecord(message))).map(message => {
+    const previous = previousByKey.get(message.transcriptKey);
+    return {...message, historyKey: message.transcriptKey, transcriptKey: previous?.transcriptKey || message.transcriptKey, summaryKey: previous?.summaryKey};
+  });
+  const assistants = result.filter(message => message.role === 'assistant');
+  for (const original of previousRows.filter(message => message.streamKey)) {
+    // Durable public records replace their transient copy. Transfer disclosure
+    // identity (not text) before removing the live summary. Match each copy once.
+    const persisted = result.filter(message => message.submission_id && message.submission_id === original.submission_id && (!message.agent_id || message.agent_id === 'main') && (!message.run_id || message.run_id === original.run_id));
+    const retained = (values: string[], role: string) => values.filter(text => !persisted.some(message => message.role === role && String(message.content).trim() === text.trim()));
+    const summaries: string[] = [], summaryKeys: string[] = [];
+    const matched = new Set<any>();
+    (original.summaries || []).forEach((text: string, index: number) => {
+      const key = original.summaryKeys?.[index] || `${original.transcriptKey}:summary:${index}`;
+      const durable = persisted.find(message => !matched.has(message) && message.role === 'reasoning' && String(message.content).trim() === text.trim());
+      if (durable) {durable.summaryKey = key; matched.add(durable);}
+      else {summaries.push(text); summaryKeys.push(key);}
+    });
+    const stream = {...original, summaries, summaryKeys, commentary: retained(original.commentary || [], 'commentary')};
+    if (stream.reconciled) {
+      const at = result.findIndex(message => message.role === 'assistant' && (stream.finalRunID ? message.run_id === stream.finalRunID : message.time === stream.finalTime && message.content === stream.finalContent));
+      if (at >= 0 && (stream.summaries.length || stream.commentary.length || stream.content)) result.splice(at, 0, stream);
+      continue;
+    }
+    // Prefer stable run IDs. The ordinal anchor is only a fallback for legacy
+    // history; never attach every earlier stream to the latest assistant turn.
+    const final = assistants.find(message => message.run_id && message.run_id === stream.run_id && (!stream.submission_id || !message.submission_id || message.submission_id === stream.submission_id)) || assistants.find(message => message.submission_id && message.submission_id === stream.submission_id) || assistants[stream.historyAnchor];
+    if (stream.streamState === 'complete' && final) {
+      const content = String(stream.content || '').trim();
+      const answer = String(final.content || '').trim();
+      let commentary = [...(stream.commentary || [])];
+      if (content && content !== answer && !answer.includes(content)) {
+        const prefix = answer && content.endsWith(answer) ? content.slice(0, -answer.length).trim() : content;
+        if (prefix) commentary.push(prefix);
+      }
+      commentary = retained([...new Set(commentary)].filter(text => text.trim() !== answer), 'commentary');
+      if (stream.summaries?.length || commentary.length) result.splice(result.indexOf(final), 0, {...stream, content: '', commentary, pending: false, reconciled: true, finalTime: final.time, finalContent: final.content, finalRunID: final.run_id});
+      else final.transcriptKey = stream.transcriptKey;
+    } else result.push(stream);
+  }
+  return result;
+}
+
+function interruptChatStreams(messages: any[]) {
+  return messages.map(message => message.streamKey && message.pending ? {...message, pending: false, streamState: 'incomplete'} : message);
+}

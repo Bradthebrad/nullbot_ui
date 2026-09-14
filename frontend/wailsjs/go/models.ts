@@ -267,6 +267,7 @@ export namespace app {
 	}
 	export class UIConfig {
 	    theme: string;
+	    suggest_matching_skills: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new UIConfig(source);
@@ -275,6 +276,7 @@ export namespace app {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.theme = source["theme"];
+	        this.suggest_matching_skills = source["suggest_matching_skills"] ?? false;
 	    }
 	}
 	export class EditorConfig {

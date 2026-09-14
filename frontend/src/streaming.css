@@ -1,0 +1,15 @@
+.chat-reasoning, .reasoning-reference {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  border-left: 2px solid color-mix(in srgb, var(--accent) 55%, #b49aef);
+  padding-left: 10px;
+  margin: 8px 0;
+}
+.chat-reasoning summary, .reasoning-reference summary {cursor: pointer; color: var(--muted); font-size: 12px;}
+.chat-reasoning .markdown-body, .reasoning-reference .markdown-body {font: inherit;}
+.message, .activity-body {min-width: 0; overflow-wrap: anywhere;}
+.message:has(.chat-reasoning) {width: 100%; box-sizing: border-box;}
+.reasoning-reference .markdown-body {max-height: 220px; overflow: auto;}
+.chat-reasoning summary:focus-visible, .reasoning-reference summary:focus-visible {outline: 2px solid var(--accent); outline-offset: 3px;}
