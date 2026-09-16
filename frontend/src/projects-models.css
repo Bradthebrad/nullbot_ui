@@ -1,0 +1,61 @@
+/* Component-local styles: shared theme tokens, no global control overrides. */
+.pm-projects, .pm-models { min-width: 0; }
+.pm-projects { display: flex; flex-direction: column; gap: 16px; }
+.pm-heading, .pm-card-heading, .pm-save-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pm-heading h2, .pm-card-heading h3 { margin: 0; }
+.pm-heading p, .pm-save-bar p { margin: 6px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.pm-heading, .pm-card-heading, .pm-save-bar { overflow-wrap: anywhere; }
+.pm-badge { display: inline-flex; align-items: center; flex-shrink: 0; padding: 4px 8px; border-radius: 6px; background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-size: 11px; font-weight: 700; }
+.pm-permission-guide { display: flex; flex-wrap: wrap; gap: 8px 24px; color: var(--muted); font-size: 12px; }
+.pm-permission-guide strong { color: var(--text); margin-right: 5px; }
+.pm-caveat { border: 1px solid color-mix(in srgb, var(--border) 28%, transparent); border-radius: 8px; padding: 10px 12px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.pm-caveat summary { cursor: pointer; color: var(--text); }
+.pm-caveat p:last-child { margin-bottom: 0; }
+.pm-project-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.pm-add-project, .pm-model-toolbar { display: flex; align-items: end; gap: 12px; padding: 14px; border-radius: 10px; background: color-mix(in srgb, var(--panel) 90%, var(--accent) 3%); border: 1px solid color-mix(in srgb, var(--border) 24%, transparent); }
+.pm-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; font-size: 12px; color: var(--muted); }
+.pm-field input, .pm-field select { font-size: 13px; }
+.pm-path { flex: 1; }
+.pm-project-list { display: grid; gap: 10px; margin: 16px 0; }
+.pm-project-card, .pm-model-card { min-width: 0; padding: 14px; background: var(--panel); border: 1px solid color-mix(in srgb, var(--border) 28%, transparent); border-radius: 10px; }
+.pm-project-card.is-primary, .pm-model-card.is-selected { border-color: color-mix(in srgb, var(--accent) 65%, transparent); }
+.pm-card-heading { align-items: start; margin-bottom: 12px; }
+.pm-card-heading > div { min-width: 0; }
+.pm-card-heading strong, .pm-card-heading h3 { font-size: 14px; }
+.pm-card-heading small { color: var(--muted); font-size: 11px; }
+.pm-card-heading button { min-height: 28px; font-size: 12px; padding: 4px 10px; flex-shrink: 0; }
+.pm-project-edit { display: grid; grid-template-columns: minmax(110px, .7fr) minmax(180px, 2fr) minmax(135px, .65fr) auto; align-items: end; gap: 10px; }
+.pm-project-edit > button, .pm-add-project > button, .pm-model-toolbar > button, .pm-save-bar > button { padding: 8px 12px; white-space: nowrap; }
+.pm-save-bar { padding: 16px 0; border-top: 1px solid color-mix(in srgb, var(--border) 25%, transparent); }
+.pm-save-bar strong { font-size: 13px; }
+.pm-save-bar small { display: block; margin-top: 6px; color: var(--muted); overflow-wrap: anywhere; }
+.pm-current-roles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.pm-current-roles > div { display: grid; gap: 6px; border-left: 3px solid var(--accent); padding: 10px 14px; background: var(--panel); border-radius: 4px 8px 8px 4px; }
+.pm-current-roles span { font-size: 11px; color: var(--muted); }
+.pm-current-roles strong { font-size: 13px; overflow-wrap: anywhere; }
+.pm-model-catalog { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr)); gap: 12px; align-items: stretch; }
+.pm-model-card { display: flex; flex-direction: column; }
+.pm-model-card > p { font-size: 13px; color: var(--muted); line-height: 1.5; margin: 0 0 12px; overflow-wrap: anywhere; }
+.pm-role-badges { display: flex; flex-wrap: wrap; justify-content: end; gap: 4px; }
+.pm-model-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: auto; padding-top: 16px; }
+.pm-model-actions button { padding: 8px 4px; font-size: 12px; }
+.pm-model-actions .is-active { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--panel)); }
+.pm-muted { color: var(--muted); font-size: 12px; }
+.pm-notice { padding: 12px; border: 1px solid color-mix(in srgb, var(--border) 40%, transparent); border-radius: 8px; font-size: 13px; overflow-wrap: anywhere; }
+.pm-notice button { margin-left: 12px; }
+.pm-projects :is(button, input, select, summary):focus-visible, .pm-models :is(button, input, select):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.pm-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+@media (max-width: 1000px) {
+  .pm-project-edit { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .pm-project-edit .pm-path { grid-column: 1 / -1; grid-row: 2; }
+  .pm-project-edit > button { justify-self: start; }
+  .pm-model-toolbar { flex-wrap: wrap; }
+}
+@media (max-width: 600px) {
+  .pm-heading, .pm-save-bar { align-items: stretch; flex-direction: column; }
+  .pm-heading > .pm-badge { align-self: start; }
+  .pm-add-project, .pm-model-toolbar { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .pm-current-roles { grid-template-columns: minmax(0, 1fr); }
+  .pm-card-heading { flex-wrap: wrap; }
+  .pm-role-badges { justify-content: start; }
+}

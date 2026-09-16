@@ -1,0 +1,9 @@
+.projects-view {padding: 24px; overflow: auto; height: 100%;}
+.composer-skills {display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px;}
+.composer-skills small {flex-basis: 100%;}
+.skill-chip {border-radius: 16px; padding: 4px 10px;}
+.skill-chip.selected {border-color: var(--accent);}
+.stream-text {white-space: pre-wrap; overflow-wrap: anywhere; font-family: 'Segoe UI', sans-serif; line-height: 1.5;}
+.stream-text.reasoning {font-family: Georgia, 'Times New Roman', serif; border-left: 2px solid var(--accent); padding-left: 10px;}
+.stream-text p {font: inherit; white-space: pre-wrap;}
+.thought-panel > .activity-pane {height: auto; max-height: 60vh;}
