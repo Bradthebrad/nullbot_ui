@@ -2,7 +2,13 @@
   "$schema": "https://wails.io/schemas/config.v2.json",
   "name": "nullbot_ui",
   "outputfilename": "nullbot_ui",
-  "frontend:install": "npm install",
+  "frontend:install": "npm ci",
+  "info": {
+    "productName": "NullBot UI",
+    "productVersion": "0.4.0",
+    "companyName": "Bradthebrad",
+    "comments": "NullBot desktop agent workspace"
+  },
   "frontend:build": "npm run build",
   "frontend:dev:watcher": "npm run dev",
   "frontend:dev:serverUrl": "auto",

@@ -6,8 +6,8 @@ require github.com/wailsapp/wails/v2 v2.12.0
 
 require (
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 // indirect
-	github.com/Bradthebrad/nullbot v0.4.0
-	github.com/Bradthebrad/tinychain v0.2.0
+	github.com/Bradthebrad/nullbot v0.4.1-0.20260916024641-12e21ae04470
+	github.com/Bradthebrad/tinychain v0.2.1-0.20260916023134-8084d30b52b6
 	github.com/bep/debounce v1.2.1 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect

@@ -14,6 +14,10 @@ export function Analyze(arg1) {
   return window['go']['main']['App']['Analyze'](arg1);
 }
 
+export function AttachBytes(arg1, arg2) {
+  return window['go']['main']['App']['AttachBytes'](arg1, arg2);
+}
+
 export function AttachFiles(arg1) {
   return window['go']['main']['App']['AttachFiles'](arg1);
 }
@@ -36,6 +40,10 @@ export function CancelScheduledTask(arg1) {
 
 export function CancelTask(arg1) {
   return window['go']['main']['App']['CancelTask'](arg1);
+}
+
+export function ChatSubmissionState() {
+  return window['go']['main']['App']['ChatSubmissionState']();
 }
 
 export function Command(arg1) {
@@ -130,6 +138,10 @@ export function PreviewFile(arg1) {
   return window['go']['main']['App']['PreviewFile'](arg1);
 }
 
+export function Projects() {
+  return window['go']['main']['App']['Projects']();
+}
+
 export function PromptDefaults() {
   return window['go']['main']['App']['PromptDefaults']();
 }
@@ -144,6 +156,10 @@ export function ReadSession(arg1, arg2) {
 
 export function ReadSkill(arg1) {
   return window['go']['main']['App']['ReadSkill'](arg1);
+}
+
+export function RemoveQueuedChat(arg1) {
+  return window['go']['main']['App']['RemoveQueuedChat'](arg1);
 }
 
 export function RenamePath(arg1) {
@@ -176,6 +192,10 @@ export function SaveFile(arg1) {
 
 export function SavePlan(arg1, arg2) {
   return window['go']['main']['App']['SavePlan'](arg1, arg2);
+}
+
+export function SaveProjects(arg1, arg2) {
+  return window['go']['main']['App']['SaveProjects'](arg1, arg2);
 }
 
 export function SavePrompts(arg1) {
@@ -232,6 +252,14 @@ export function State() {
 
 export function Submit(arg1) {
   return window['go']['main']['App']['Submit'](arg1);
+}
+
+export function SubmitChatRequest(arg1) {
+  return window['go']['main']['App']['SubmitChatRequest'](arg1);
+}
+
+export function SubmitWithSkills(arg1, arg2) {
+  return window['go']['main']['App']['SubmitWithSkills'](arg1, arg2);
 }
 
 export function Tasks() {

@@ -9,6 +9,8 @@ export function AddMCPServer(arg1:main.MCPInput):Promise<main.UIState>;
 
 export function Analyze(arg1:string):Promise<app.Reply>;
 
+export function AttachBytes(arg1:string,arg2:string):Promise<main.AttachmentInfo>;
+
 export function AttachFiles(arg1:Array<string>):Promise<Array<main.AttachmentInfo>>;
 
 export function AttachTextPaths(arg1:string):Promise<Array<main.AttachmentInfo>>;
@@ -20,6 +22,8 @@ export function BuildUsageReport(arg1:main.UsageFilter,arg2:boolean):Promise<mai
 export function CancelScheduledTask(arg1:string):Promise<Array<app.ScheduledTask>>;
 
 export function CancelTask(arg1:string):Promise<Array<app.AgentTask>>;
+
+export function ChatSubmissionState():Promise<app.SubmissionSnapshot>;
 
 export function Command(arg1:string):Promise<app.Reply>;
 
@@ -67,6 +71,8 @@ export function PollCodexLogin(arg1:app.CodexDeviceFlow):Promise<main.CodexLogin
 
 export function PreviewFile(arg1:string):Promise<main.FilePreview>;
 
+export function Projects():Promise<main.ProjectsState>;
+
 export function PromptDefaults():Promise<main.PromptDefaults>;
 
 export function ReadPlan(arg1:string):Promise<app.Plan>;
@@ -74,6 +80,8 @@ export function ReadPlan(arg1:string):Promise<app.Plan>;
 export function ReadSession(arg1:string,arg2:number):Promise<Array<app.Message>>;
 
 export function ReadSkill(arg1:string):Promise<main.FilePreview>;
+
+export function RemoveQueuedChat(arg1:string):Promise<app.SubmissionSnapshot>;
 
 export function RenamePath(arg1:main.FileRenameRequest):Promise<main.FileBrowser>;
 
@@ -90,6 +98,8 @@ export function SaveCurrentSession(arg1:string):Promise<main.SessionSummary>;
 export function SaveFile(arg1:main.SaveFileRequest):Promise<main.FilePreview>;
 
 export function SavePlan(arg1:string,arg2:string):Promise<app.Reply>;
+
+export function SaveProjects(arg1:Array<app.Project>,arg2:string):Promise<main.ProjectsState>;
 
 export function SavePrompts(arg1:app.PromptConfig):Promise<main.UIState>;
 
@@ -118,6 +128,10 @@ export function Skills():Promise<Array<main.SkillFile>>;
 export function State():Promise<main.UIState>;
 
 export function Submit(arg1:string):Promise<app.Reply>;
+
+export function SubmitChatRequest(arg1:main.ChatRequest):Promise<app.Reply>;
+
+export function SubmitWithSkills(arg1:string,arg2:Array<string>):Promise<app.Reply>;
 
 export function Tasks():Promise<Array<app.AgentTask>>;
 

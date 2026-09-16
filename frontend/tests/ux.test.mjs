@@ -39,7 +39,7 @@ test('composer supports undo, redo, recall/clear undo, and divergent edits', () 
     useRef(initial) { const i = index++; return slots[i] ??= {current: initial}; },
     useState(initial) { const i = index++; if (!(i in slots)) slots[i] = initial; return [slots[i], value => { slots[i] = value; }]; },
   });
-  const hook = fs.readFileSync(new URL('../src/useComposerDraft.ts', import.meta.url), 'utf8').replace(/^import .*;\n/m, '').replace('export function', 'function');
+  const hook = fs.readFileSync(new URL('../src/useComposerDraft.ts', import.meta.url), 'utf8').replace(/^import .*;\r?\n/m, '').replace('export function', 'function');
   vm.runInContext(ts.transpile(hook, {target: ts.ScriptTarget.ES2022}), hooks);
   const render = () => { index = 0; return hooks.useComposerDraft(); };
   render().setInput('draft'); render().setInput('draft edited');

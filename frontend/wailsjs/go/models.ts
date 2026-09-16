@@ -21,6 +21,12 @@ export namespace app {
 	    }
 	}
 	export class ActivityRecord {
+	    submission_id?: string;
+	    lane?: string;
+	    agent_id?: string;
+	    run_id?: string;
+	    parent_run_id?: string;
+	    task_id?: string;
 	    // Go type: time
 	    time: any;
 	    kind: string;
@@ -34,6 +40,12 @@ export namespace app {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.submission_id = source["submission_id"];
+	        this.lane = source["lane"];
+	        this.agent_id = source["agent_id"];
+	        this.run_id = source["run_id"];
+	        this.parent_run_id = source["parent_run_id"];
+	        this.task_id = source["task_id"];
 	        this.time = this.convertValues(source["time"], null);
 	        this.kind = source["kind"];
 	        this.name = source["name"];
@@ -135,6 +147,9 @@ export namespace app {
 		}
 	}
 	export class AgentTask {
+	    submission_id?: string;
+	    lane?: string;
+	    parent_task_id?: string;
 	    id: string;
 	    name: string;
 	    role: string;
@@ -161,6 +176,9 @@ export namespace app {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.submission_id = source["submission_id"];
+	        this.lane = source["lane"];
+	        this.parent_task_id = source["parent_task_id"];
 	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.role = source["role"];
@@ -276,7 +294,7 @@ export namespace app {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.theme = source["theme"];
-	        this.suggest_matching_skills = source["suggest_matching_skills"] ?? false;
+	        this.suggest_matching_skills = source["suggest_matching_skills"];
 	    }
 	}
 	export class EditorConfig {
@@ -331,7 +349,27 @@ export namespace app {
 	        this.max_tokens = source["max_tokens"];
 	    }
 	}
+	export class Project {
+	    id: string;
+	    name: string;
+	    path: string;
+	    permission: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Project(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.path = source["path"];
+	        this.permission = source["permission"];
+	    }
+	}
 	export class Config {
+	    projects: Project[];
+	    primary_project_id: string;
 	    brand_prefix: string;
 	    bot_name?: string;
 	    tagline: string;
@@ -356,6 +394,8 @@ export namespace app {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.projects = this.convertValues(source["projects"], Project);
+	        this.primary_project_id = source["primary_project_id"];
 	        this.brand_prefix = source["brand_prefix"];
 	        this.bot_name = source["bot_name"];
 	        this.tagline = source["tagline"];
@@ -560,6 +600,10 @@ export namespace app {
 	
 	
 	export class Message {
+	    submission_id?: string;
+	    lane?: string;
+	    agent_id?: string;
+	    task_id?: string;
 	    role: string;
 	    content: string;
 	    // Go type: time
@@ -572,6 +616,10 @@ export namespace app {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.submission_id = source["submission_id"];
+	        this.lane = source["lane"];
+	        this.agent_id = source["agent_id"];
+	        this.task_id = source["task_id"];
 	        this.role = source["role"];
 	        this.content = source["content"];
 	        this.time = this.convertValues(source["time"], null);
@@ -746,6 +794,7 @@ export namespace app {
 	}
 	
 	
+	
 	export class Reply {
 	    message: string;
 	    command?: string;
@@ -849,6 +898,86 @@ export namespace app {
 	        this.repeat_every = source["repeat_every"];
 	        this.run_count = source["run_count"];
 	        this.last_error = source["last_error"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Submission {
+	    request_id?: string;
+	    id: string;
+	    mode: string;
+	    input?: string;
+	    status: string;
+	    reply?: Reply;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Submission(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.request_id = source["request_id"];
+	        this.id = source["id"];
+	        this.mode = source["mode"];
+	        this.input = source["input"];
+	        this.status = source["status"];
+	        this.reply = this.convertValues(source["reply"], Reply);
+	        this.error = source["error"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class SubmissionSnapshot {
+	    paused: boolean;
+	    busy: boolean;
+	    primary_id?: string;
+	    queue: Submission[];
+	    jobs: Submission[];
+	
+	    static createFrom(source: any = {}) {
+	        return new SubmissionSnapshot(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.paused = source["paused"];
+	        this.busy = source["busy"];
+	        this.primary_id = source["primary_id"];
+	        this.queue = this.convertValues(source["queue"], Submission);
+	        this.jobs = this.convertValues(source["jobs"], Submission);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1212,6 +1341,7 @@ export namespace main {
 	    kind: string;
 	    size?: number;
 	    error?: string;
+	    preview_url?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new AttachmentInfo(source);
@@ -1226,6 +1356,27 @@ export namespace main {
 	        this.kind = source["kind"];
 	        this.size = source["size"];
 	        this.error = source["error"];
+	        this.preview_url = source["preview_url"];
+	    }
+	}
+	export class ChatRequest {
+	    mode: string;
+	    text: string;
+	    skill_paths?: string[];
+	    request_id?: string;
+	    target_job_id?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ChatRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mode = source["mode"];
+	        this.text = source["text"];
+	        this.skill_paths = source["skill_paths"];
+	        this.request_id = source["request_id"];
+	        this.target_job_id = source["target_job_id"];
 	    }
 	}
 	export class CodexLoginPollState {
@@ -1547,6 +1698,42 @@ export namespace main {
 	        this.path = source["path"];
 	        this.is_dir = source["is_dir"];
 	    }
+	}
+	export class ProjectsState {
+	    projects: app.Project[];
+	    primary_project_id: string;
+	    workspace_dir: string;
+	    warning: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProjectsState(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.projects = this.convertValues(source["projects"], app.Project);
+	        this.primary_project_id = source["primary_project_id"];
+	        this.workspace_dir = source["workspace_dir"];
+	        this.warning = source["warning"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class PromptDefaults {
 	    manager: string;

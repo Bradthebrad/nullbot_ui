@@ -1,6 +1,17 @@
 # Wails / frontend build output
 /build/bin/
 /frontend/dist/
+/build/feature-test/
+/build/releases/
+/scripts/release-local.ps1
+/go.work
+/go.work.sum
+
+# Runtime profiles and authentication (never publish)
+.nullbot/
+**/isolated-profile/
+**/codex_auth.json
+**/auth.json
 
 # Dependencies
 /frontend/node_modules/
