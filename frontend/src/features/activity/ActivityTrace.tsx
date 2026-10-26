@@ -117,7 +117,7 @@ const StepRow = memo(function StepRow({step, focused}: {step: Step; focused: boo
       <span className="step-marker" aria-hidden="true"><StepIcon step={step} category={description.category} /></span>
       <button type="button" className="step-main" aria-expanded={expandable ? open : undefined} disabled={!expandable} onClick={() => setOpen(value => !value)}>
         <span className="step-title">{description.title}</span>
-        <span className="step-time num">{duration != null && step.kind !== 'note' ? formatDuration(duration) : ''}</span>
+        <span className="step-time num">{duration != null && step.kind !== 'note' && !(step.kind === 'thinking' && duration < 50) ? formatDuration(duration) : ''}</span>
         {(source || description.detail) && (
           <span className="step-line">
             {source && <span className="step-source">{source}</span>}
