@@ -135,7 +135,7 @@ test('Signal replacement never preloads or retains optional API token', async ()
 test('service accounts are mounted once, in Settings > Accounts', () => {
   const accounts = read('../src/features/settings/AccountsSettings.tsx');
   assert.equal((accounts.match(/<ServiceAccountsPanel \/>/g) || []).length, 1);
-  for (const file of ['../src/App.tsx', '../src/ModelsView.tsx', '../src/features/settings/SettingsView.tsx']) assert.doesNotMatch(read(file), /<ServiceAccountsPanel/);
+  for (const file of ['../src/App.tsx', '../src/features/settings/ModelsSettings.tsx', '../src/features/settings/SettingsView.tsx']) assert.doesNotMatch(read(file), /<ServiceAccountsPanel/);
 });
 
 test('offline status is metadata only; unavailable tiles have no add or replace', async () => {
