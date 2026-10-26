@@ -88,57 +88,9 @@ test('safe preview allowlist rejects active/remote formats and queue sanitizes r
   await queue.stagePaths(['a']); assert.equal(queue.snapshot()[0].preview_url, undefined);
 });
 
-// Same executable TypeScript + lightweight hook/tree approach as projects-models.test.mjs.
-const appSource = read('App.tsx');
-const ast = ts.createSourceFile('App.tsx', appSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-function mountChat(api, busy = false) {
-  const slots = []; let cursor = 0; let draft = 'keep my draft'; let status = '';
-  const queue = createAttachmentQueue(api);
-  const useState = initial => {const i=cursor++; if (!(i in slots)) slots[i]=initial; return [slots[i], value => {slots[i]=typeof value==='function'?value(slots[i]):value;}];};
-  const React = {createElement: (type, props, ...children) => ({type, props: props || {}, children: children.flat(Infinity)})};
-  const globals = {React, ...helpers, ...routing, useChatLayout: () => ({container:{current:null}, activityWidth:390, composerHeight:250, activityBounds:{min:220,max:700}, composerBounds:{min:150,max:600}, change(){}}), useState, useRef: initial => {const i=cursor++; return slots[i] ??= {current:initial};}, useEffect: () => {},
-    useComposerDraft: () => ({input:draft, setInput: value => {draft=value;}}), useAttachments: () => ({attachments:queue.snapshot(), queue}),
-    useSkillContext: () => ({paths:['skill/SKILL.md'], matches:[]}), ...api};
-  for (const name of ['ResizeHandle','BusySendDialog','MessageList','SkillContextNotice','SkillComposer','AttachmentTray','AlsoDrawer','LiveActivity','Files','Layers','Compass','ListChecks','Archive','PauseIcon','Play','Save','Trash2','Send']) globals[name]=name;
-  const context = vm.createContext(globals);
-  vm.runInContext(ts.transpile(ast.statements.filter(ts.isFunctionDeclaration).map(node => node.getText(ast)).join('\n'), {target:ts.ScriptTarget.ES2022, jsx:ts.JsxEmit.React}), context);
-  return {queue, draft:()=>draft, status:()=>status, render() {cursor=0; return context.ChatView({active:true, busy, ui:{config:{}}, messages:[], activity:[], suppressNextReplyRef:{current:false}, setStatus:value=>{status=value;}, setMessages:()=>{}, setActivity:()=>{}, setBusy:()=>{}, refreshState:()=>{}});}};
-}
 function nodes(tree, predicate) {if(!tree || typeof tree!=='object')return []; return [...(predicate(tree)?[tree]:[]), ...(tree.children||[]).flatMap(child=>nodes(child,predicate))];}
-const text = tree => typeof tree==='string'?tree:(tree?.children||[]).map(text).join('');
-const sendButton = tree => nodes(tree, n=>n.type==='button' && text(n)==='Send')[0];
-const composer = tree => nodes(tree,n=>n.type==='SkillComposer')[0];
-
-test('rendered composer Send and Enter guard pending/failed snapshots, preserve draft, send only ready tokens with skills', async () => {
-  const pending=deferred(); const outbound=[];
-  const view=mountChat({attachFiles:async()=>pending.promise, submitChatRequest:async (...args)=>{outbound.push(args); return {data:{background:true}};}});
-  const staleTree=view.render();
-  const done=view.queue.stagePaths(['C:\\a.png']);
-  assert.equal(sendButton(view.render()).props.disabled,true);
-  await sendButton(staleTree).props.onClick(); // snapshot guard, not just disabled DOM
-  composer(staleTree).props.onKeyDown({key:'Enter', preventDefault(){}});
-  assert.equal(outbound.length,0); assert.equal(view.draft(),'keep my draft');
-  pending.resolve([{error:'denied'}]); await done;
-  assert.equal(sendButton(view.render()).props.disabled,true);
-  await sendButton(view.render()).props.onClick(); assert.match(view.status(),/Remove failed/);
-  view.queue.remove(view.queue.snapshot()[0].id);
-  await view.queue.stageFiles([]);
-  await sendButton(view.render()).props.onClick();
-  assert.equal(outbound.length,1); assert.equal(outbound[0][0].text,'keep my draft'); assert.deepEqual(Array.from(outbound[0][0].skills),['skill/SKILL.md']);
-  assert.equal(view.draft(),'');
-});
-
-test('accepted sends remove only their snapshot; concurrent staging and edited draft survive', async () => {
-  const submitted=deferred(); let outbound;
-  const view=mountChat({attachFiles:async paths=>[ready(paths[0])], submitChatRequest:async value=>{outbound=value; return submitted.promise;}});
-  await view.queue.stagePaths(['one.png']);
-  const sending=sendButton(view.render()).props.onClick();
-  assert.match(routing.chatWireRequest(outbound).text, /keep my draft\n\n@file\("one.png"\)/);
-  composer(view.render()).props.onChange({target:{value:'next draft'}});
-  await view.queue.stagePaths(['two.png']);
-  submitted.resolve({data:{background:true}}); await sending;
-  assert.equal(view.draft(),'next draft'); assert.deepEqual(Array.from(view.queue.snapshot(),item=>item.name),['two.png']);
-});
+// Composer send behavior (guards, partial clears, busy routing) is covered by
+// src/features/chat/Composer.test.tsx (vitest + Testing Library).
 
 test('attachment preview renders safe thumbnail button, modal cancel and focus restoration', () => {
   let cursor=0; const slots=[]; const effects=[]; let focused=0, restored=0, shown=0, closed=0, cancelled=0;
@@ -168,50 +120,4 @@ test('clipboard bytes reach AttachBytes without resolving paths and duplicate fi
   assert.deepEqual(calls,[['screen.png','AQID'],['screen.png','AQID']]);
   assert.equal(queue.snapshot().length,2);assert.notEqual(queue.snapshot()[0].id,queue.snapshot()[1].id);
   assert.equal(attachmentSendBlock(queue.snapshot()),'');
-});
-
-test('rejected sends retain draft and ready attachments for retry', async () => {
-  const view=mountChat({attachFiles:async paths=>[ready(paths[0])],submitChatRequest:async()=>{throw Error('offline');}});
-  await view.queue.stagePaths(['one.png']);
-  await sendButton(view.render()).props.onClick();
-  assert.equal(view.draft(),'keep my draft');assert.equal(view.queue.snapshot()[0].status,'ready');
-  assert.match(view.status(),/offline/);
-});
-
-test('Also button directly sends the composer with attachments; no mode toggle', async () => {
-  const calls=[];const pending=deferred();
-  const view=mountChat({attachFiles:async()=>pending.promise,submitChatRequest:async value=>{calls.push(value);return {message:'ok'};}});
-  const done=view.queue.stagePaths(['side.png']);
-  const also=()=>nodes(view.render(),n=>n.type==='button' && text(n)==='Also')[0];
-  await also().props.onClick();assert.equal(calls.length,0);
-  pending.resolve([ready('side.png')]);await done;
-  await also().props.onClick();assert.equal(calls.length,1);assert.equal(calls[0].mode,'also');
-  assert.ok(routing.chatWireRequest(calls[0]).text.includes('side.png'));
-  assert.equal(view.draft(),'');assert.equal(view.queue.snapshot().length,0);
-});
-
-test('busy Send and Enter ask for routing, Cancel preserves draft and queue/steer explicitly submit once', async () => {
-  for (const mode of ['queue','steer','also']) {
-    const calls=[];const pending=deferred();
-    const view=mountChat({attachFiles:async paths=>[ready(paths[0])],submitChatRequest:async value=>{calls.push(value);return pending.promise;}},true);
-    await view.queue.stagePaths(['ready.png']);
-    await sendButton(view.render()).props.onClick();
-    let modal=nodes(view.render(),n=>n.type==='BusySendDialog')[0];assert.ok(modal);assert.equal(calls.length,0);
-    modal.props.onCancel();assert.equal(nodes(view.render(),n=>n.type==='BusySendDialog').length,0);
-    assert.equal(view.draft(),'keep my draft');assert.equal(view.queue.snapshot().length,1);
-    composer(view.render()).props.onKeyDown({key:'Enter',preventDefault(){}});
-    modal=nodes(view.render(),n=>n.type==='BusySendDialog')[0];assert.ok(modal);
-    modal.props.onChoose(mode);modal.props.onChoose(mode);
-    assert.equal(calls.length,1);assert.equal(calls[0].mode,mode);
-    assert.equal(calls[0].skills[0],'skill/SKILL.md');assert.equal(calls[0].attachments.length,1);
-    pending.resolve({data:{background:true}});await tick();
-    assert.equal(view.draft(),'');assert.equal(view.queue.snapshot().length,0);
-  }
-});
-
-test('Shift Enter and IME Enter never submit or open busy dialog', () => {
-  const view=mountChat({submitChatRequest:()=>{throw Error('must not submit');}},true);
-  composer(view.render()).props.onKeyDown({key:'Enter',shiftKey:true});
-  composer(view.render()).props.onKeyDown({key:'Enter',nativeEvent:{isComposing:true}});
-  assert.equal(nodes(view.render(),n=>n.type==='BusySendDialog').length,0);
 });

@@ -36,7 +36,7 @@ test('project dropdown labels and staged primary selection preserve backend valu
   assert.equal(nodes(tree, n => n.type === 'input' && n.props.type === 'radio').length, 0);
   const cards = nodes(tree, n => n.type === 'article');
   const select = nodes(cards[1], n => n.type === 'select')[0];
-  assert.deepEqual(nodes(select, n => n.type === 'option').map(n => [n.props.value, text(n)]), [['read-only', 'Read only'], ['read-write', 'Read & write'], ['full', 'Full']]);
+  assert.deepEqual(nodes(select, n => n.type === 'option').map(n => [n.props.value, text(n)]), [['read-only', 'Read only'], ['read-write', 'Read & write'], ['full', 'Full'], ['custom', 'Custom']]);
   buttons(cards[1]).find(n => text(n) === 'Set as primary').props.onClick();
   assert.equal(saved, undefined);
   tree = view.render();

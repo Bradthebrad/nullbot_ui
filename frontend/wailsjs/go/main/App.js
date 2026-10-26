@@ -270,6 +270,10 @@ export function Sessions(arg1) {
   return window['go']['main']['App']['Sessions'](arg1);
 }
 
+export function SetAppearance(arg1, arg2) {
+  return window['go']['main']['App']['SetAppearance'](arg1, arg2);
+}
+
 export function SetBotName(arg1) {
   return window['go']['main']['App']['SetBotName'](arg1);
 }

@@ -137,6 +137,8 @@ export function ServiceAccountStatus():Promise<app.ServiceAccountState>;
 
 export function Sessions(arg1:number):Promise<Array<main.SessionSummary>>;
 
+export function SetAppearance(arg1:string,arg2:string):Promise<main.UIState>;
+
 export function SetBotName(arg1:string):Promise<main.UIState>;
 
 export function SetMCPToolPolicy(arg1:string,arg2:string,arg3:string):Promise<any>;

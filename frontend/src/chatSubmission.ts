@@ -5,7 +5,7 @@ export type ChatMode = 'normal' | 'also' | 'queue' | 'steer';
 export type ChatRequest = {mode: ChatMode; text: string; attachments: {token: string}[]; skills?: string[]; request_id: string; target_job_id?: string};
 export type SubmissionJob = {id: string; request_id?: string; mode: string; input?: string; status: string; error?: string; reply?: ChatReply};
 export type SubmissionSnapshot = {busy: boolean; primary_id?: string; queue: SubmissionJob[]; jobs: SubmissionJob[]};
-export type ChatReply = {message?: string; history?: any[]; activity?: any[]; data?: {
+export type ChatReply = {message?: string; command?: string; open_panel?: string; history?: any[]; activity?: any[]; data?: {
   accepted?: boolean; background?: boolean; history_replace?: boolean; mode?: string; request_id?: string; task_id?: string;
   submission_id?: string; submission_mode?: string; submission_status?: string; submissions?: SubmissionSnapshot;
   submission?: {id: string; mode: string; status: string};

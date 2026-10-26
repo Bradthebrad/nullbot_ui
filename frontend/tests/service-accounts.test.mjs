@@ -132,11 +132,10 @@ test('Signal replacement never preloads or retains optional API token', async ()
   }
 });
 
-test('shared Accounts panel mounts service accounts in Settings and Models', () => {
-  const app = read('../src/App.tsx');
-  assert.equal((app.match(/<ServiceAccountsPanel \/>/g) || []).length, 1);
-  assert.match(app, /accountsPanel={<AccountsPanel refreshState={refreshState} \/>}/);
-  assert.match(app, /<AccountsPanel refreshState={refreshState} setStatus={setStatus} \/>/);
+test('service accounts are mounted once, in Settings > Accounts', () => {
+  const accounts = read('../src/features/settings/AccountsSettings.tsx');
+  assert.equal((accounts.match(/<ServiceAccountsPanel \/>/g) || []).length, 1);
+  for (const file of ['../src/App.tsx', '../src/ModelsView.tsx', '../src/features/settings/SettingsView.tsx']) assert.doesNotMatch(read(file), /<ServiceAccountsPanel/);
 });
 
 test('offline status is metadata only; unavailable tiles have no add or replace', async () => {

@@ -1,4 +1,4 @@
-import {useEffect, useLayoutEffect, useRef, useState, type TextareaHTMLAttributes} from 'react';
+import {useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type TextareaHTMLAttributes} from 'react';
 import {matchSkills, highlightSkillWords, type SkillMetadata, type SkillMatch} from './skillMatching';
 import './skill-composer.css';
 
@@ -13,11 +13,11 @@ export function useSkillContext(input: string, skills: SkillMetadata[], enabled:
   return {matches, paths: matches.map(skill => skill.path), dismiss: (path: string) => setDismissed(current => [...current, path])};
 }
 
-type ComposerProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {matches: SkillMatch[]};
+type ComposerProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {matches: SkillMatch[]; textareaRef?: MutableRefObject<HTMLTextAreaElement | null>};
 // Keep a real textarea for selection, IME, paste, caret, accessibility and undo.
 // The non-interactive mirror paints only matching words without changing the draft.
-export function SkillComposer({matches, value, onScroll, className = '', ...props}: ComposerProps) {
-  const textarea = useRef<HTMLTextAreaElement>(null);
+export function SkillComposer({matches, value, onScroll, className = '', textareaRef, ...props}: ComposerProps) {
+  const textarea = useRef<HTMLTextAreaElement | null>(null);
   const mirror = useRef<HTMLDivElement>(null);
   const text = String(value || '');
   function sync() {
@@ -36,7 +36,7 @@ export function SkillComposer({matches, value, onScroll, className = '', ...prop
     return () => observer.disconnect();
   }, []);
   return <div className="skill-composer">
-    <textarea {...props} value={value} ref={textarea} className={`skill-composer-input ${className}`} onScroll={event => {sync(); onScroll?.(event);}} />
+    <textarea {...props} value={value} ref={node => {textarea.current = node; if (textareaRef) textareaRef.current = node;}} className={`skill-composer-input ${className}`} onScroll={event => {sync(); onScroll?.(event);}} />
     <div className="skill-composer-mirror" ref={mirror} aria-hidden="true">
       {highlightSkillWords(text, matches).map((part, index) => part.highlighted
         ? <span className="skill-word-glow" key={index}>{part.text}</span>

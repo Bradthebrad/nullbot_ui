@@ -1,14 +1,15 @@
-import {useEffect, useRef, useState, type ReactNode} from 'react';
+// Model catalog and role assignment. Kept free of runtime helpers so tests
+// can execute it with a minimal hook harness.
+import {useEffect, useRef, useState} from 'react';
 import {Models, SetModel} from '../wailsjs/go/main/App';
 import './projects-models.css';
 
-type Props = {ui: any; refreshState: () => void; accountsPanel?: ReactNode};
+type Props = {ui: any; refreshState: () => void};
 type Target = 'manager' | 'subagent' | 'both';
-const roleLabel: Record<Target, string> = {manager: 'Manager', subagent: 'Subagent', both: 'Both'};
-const modelKey = (config: any) => config?.provider && config?.model ? `${config.provider}/${config.model}` : 'Not configured';
+const roleLabel: Record<Target, string> = {manager: 'Manager', subagent: 'Subagents', both: 'Both'};
+const modelKey = (config: any) => (config?.provider && config?.model ? `${config.provider}/${config.model}` : '');
 
-export default function ModelsView({ui, refreshState, accountsPanel}: Props) {
-  const [tab, setTab] = useState('models');
+export default function ModelsView({ui, refreshState}: Props) {
   const [groups, setGroups] = useState<any[]>(ui.models || []);
   const [provider, setProvider] = useState(ui.config?.model?.provider || '');
   const [query, setQuery] = useState('');
@@ -22,7 +23,8 @@ export default function ModelsView({ui, refreshState, accountsPanel}: Props) {
   const currentSubagent = modelKey(ui.config?.subagent_model);
   useEffect(() => {
     let active = true;
-    setLoading(true); setError('');
+    setLoading(true);
+    setError('');
     Models().then(next => {if (active) setGroups(next || []);})
       .catch(e => {if (active) setError(String(e));})
       .finally(() => {if (active) setLoading(false);});
@@ -32,53 +34,75 @@ export default function ModelsView({ui, refreshState, accountsPanel}: Props) {
   async function choose(providerID: string, model: string, target: Target) {
     if (choosing.current) return;
     choosing.current = true;
-    setPending(`${providerID}/${model}:${target}`); setError(''); setNotice('');
+    setPending(`${providerID}/${model}:${target}`);
+    setError('');
+    setNotice('');
     try {
       await SetModel(providerID, model, target);
       await refreshState();
-      setNotice(`${providerID}/${model} assigned to ${target === 'both' ? 'Manager and Subagent' : roleLabel[target]}.`);
-    } catch (e) {setError(String(e));} finally {choosing.current = false; setPending('');}
+      setNotice(`${model} now runs ${target === 'both' ? 'the manager and subagents' : target === 'manager' ? 'the manager' : 'subagents'}.`);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      choosing.current = false;
+      setPending('');
+    }
   }
   const selected = groups.find(group => group.provider === provider) || groups[0];
-  const models = (selected?.models || []).filter((model: any) => `${selected?.provider || ''} ${model.name || ''} ${model.id || ''} ${model.description || ''}`.toLowerCase().includes(query.trim().toLowerCase()));
+  const q = query.trim().toLowerCase();
+  const models = (selected?.models || []).filter((model: any) => !q || `${model.name || ''} ${model.id || ''} ${model.description || ''}`.toLowerCase().includes(q));
 
-  return <section className="view-column pm-models" aria-label="Models and accounts">
-    <nav className="sticky-tabs" aria-label="Models sections">
-      <button type="button" className={tab === 'models' ? 'active' : ''} aria-pressed={tab === 'models'} onClick={() => setTab('models')}>Models</button>
-      <button type="button" className={tab === 'accounts' ? 'active' : ''} aria-pressed={tab === 'accounts'} onClick={() => setTab('accounts')}>Accounts</button>
-    </nav>
-    {tab === 'accounts' ? (accountsPanel ?? <p className="pm-notice">Manage provider credentials in Settings → Accounts.</p>) : <>
-      <header className="pm-heading"><div><h2>Choose models</h2><p>Assign a model directly to Manager, Subagent, or both roles.</p></div></header>
-      <div className="pm-current-roles"><div><span>Current Manager</span><strong>{currentManager}</strong></div><div><span>Current Subagent</span><strong>{currentSubagent}</strong></div></div>
-      <div className="pm-model-toolbar">
-        <label className="pm-field"><span>Provider</span><select value={selected?.provider || ''} onChange={e => setProvider(e.target.value)} disabled={!groups.length}>{!groups.length && <option value="">No providers</option>}{groups.map(group => <option key={group.provider} value={group.provider}>{group.provider} ({group.models?.length || 0})</option>)}</select></label>
-        <label className="pm-field pm-path"><span>Search this provider</span><input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Model name, ID or description" /></label>
-        <button type="button" disabled={loading || !!pending} onClick={() => setRetry(n => n + 1)}>Refresh models</button>
+  return <section className="models" aria-label="Models">
+    <header className="settings-head">
+      <h2>Models</h2>
+      <p className="muted">The manager talks with you and decides what to do. Subagents take on pieces of work it hands out.</p>
+    </header>
+    <div className="model-roles">
+      <div><span className="faint">Manager</span><strong className="mono">{currentManager || 'Not set'}</strong></div>
+      <div><span className="faint">Subagents</span><strong className="mono">{currentSubagent || 'Same as manager'}</strong></div>
+    </div>
+    <div className="model-bar">
+      <div className="segmented provider-tabs" role="radiogroup" aria-label="Provider">
+        {groups.map(group => (
+          <button key={group.provider} type="button" role="radio" aria-checked={group.provider === selected?.provider} className={group.provider === selected?.provider ? 'active' : ''} onClick={() => setProvider(group.provider)}>
+            {group.provider}<span className="num faint"> {group.models?.length || 0}</span>
+          </button>
+        ))}
       </div>
-      {loading && <p className="loading-inline" role="status"><span className="spinner" aria-hidden="true" />Loading models…</p>}
-      {pending && <p role="status">Applying model selection…</p>}
-      {error && <p className="pm-notice" role="alert">{error}</p>}
-      {notice && <p className="pm-notice" role="status">{notice}</p>}
-      {selected?.error && <p className="pm-notice" role="alert">{selected.provider}: {selected.error}</p>}
-      {!loading && !models.length && <p className="empty-state small">No models match this provider and search. Try another provider, clear your search, or refresh.</p>}
-      <div className="pm-model-catalog" aria-busy={loading || !!pending}>
-        {models.map((model: any) => {
-          const key = `${selected.provider}/${model.id}`;
-          const manager = key === currentManager;
-          const subagent = key === currentSubagent;
-          return <article key={key} className={`pm-model-card ${manager || subagent ? 'is-selected' : ''}`} aria-label={model.name || model.id}>
-            <header className="pm-card-heading"><div><h3>{model.name || model.id}</h3><small>{model.id}</small></div><div className="pm-role-badges">{manager && <span className="pm-badge">Manager active</span>}{subagent && <span className="pm-badge">Subagent active</span>}</div></header>
-            <p>{model.description || `Model offered by ${selected.provider}.`}</p>
-            <small className="pm-muted">{model.reasoning ? 'Reasoning' : 'Standard'}{model.responses ? ' · Responses API' : ''}</small>
-            <div className="pm-model-actions" role="group" aria-label={`Assign ${model.name || model.id}`}>
-              {(['manager', 'subagent', 'both'] as Target[]).map(target => {
-                const active = target === 'manager' ? manager : target === 'subagent' ? subagent : manager && subagent;
-                return <button type="button" key={target} className={active ? 'is-active' : ''} aria-pressed={active} aria-label={`Use ${model.name || model.id} for ${target === 'both' ? 'Manager and Subagent' : roleLabel[target]}`} disabled={loading || !!pending || !model.id} onClick={() => choose(selected.provider, model.id, target)}>{pending === `${key}:${target}` ? 'Applying…' : `${active ? '✓ ' : ''}${roleLabel[target]}`}</button>;
-              })}
+      <input className="input model-search" type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search models" aria-label="Search models" />
+      <button type="button" className="btn" disabled={loading || !!pending} onClick={() => setRetry(n => n + 1)}>Refresh list</button>
+    </div>
+    {loading && <p className="muted" role="status">Loading models…</p>}
+    {error && <p className="notice bad" role="alert">{error}</p>}
+    {notice && <p className="notice" role="status">{notice}</p>}
+    {selected?.error && <p className="notice bad" role="alert">{selected.provider}: {selected.error}</p>}
+    {!loading && !models.length && <p className="muted">No models match. Try another provider or clear the search.</p>}
+    <div className="model-list" aria-busy={loading || !!pending}>
+      {models.map((model: any) => {
+        const key = `${selected.provider}/${model.id}`;
+        const manager = key === currentManager;
+        const subagent = key === currentSubagent;
+        return <article key={key} className={`model-row ${manager || subagent ? 'in-use' : ''}`} aria-label={model.name || model.id}>
+          <div className="model-main">
+            <div className="model-name">
+              <strong>{model.name || model.id}</strong>
+              {model.name && model.name !== model.id && <span className="mono faint">{model.id}</span>}
+              {model.reasoning && <span className="tag">Reasoning</span>}
+              {manager && <span className="tag warn">Manager</span>}
+              {subagent && <span className="tag warn">Subagents</span>}
             </div>
-          </article>;
-        })}
-      </div>
-    </>}
+            {model.description && <p className="muted model-desc">{model.description}</p>}
+          </div>
+          <div className="model-assign" role="group" aria-label={`Use ${model.name || model.id} for`}>
+            {(['manager', 'subagent', 'both'] as Target[]).map(target => {
+              const active = target === 'manager' ? manager : target === 'subagent' ? subagent : manager && subagent;
+              return <button type="button" key={target} className={active ? 'btn btn-sm is-on' : 'btn btn-sm'} aria-pressed={active} aria-label={`Use ${model.name || model.id} for ${target === 'both' ? 'the manager and subagents' : roleLabel[target]}`} disabled={loading || !!pending || !model.id} onClick={() => choose(selected.provider, model.id, target)}>
+                {pending === `${key}:${target}` ? 'Applying…' : roleLabel[target]}
+              </button>;
+            })}
+          </div>
+        </article>;
+      })}
+    </div>
   </section>;
 }

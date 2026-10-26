@@ -1,0 +1,77 @@
+/* Rendered Markdown: replies, files, skills. */
+
+.prose {
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.62;
+  overflow-wrap: anywhere;
+}
+.prose > :first-child { margin-top: 0; }
+.prose > :last-child { margin-bottom: 0; }
+.prose p,
+.prose ul,
+.prose ol,
+.prose blockquote,
+.prose .code-block,
+.prose .table-scroll { margin: 0 0 0.75em; }
+.prose h1, .prose h2, .prose h3, .prose h4 { margin: 1.2em 0 0.45em; line-height: 1.3; }
+.prose h1 { font-size: 19px; }
+.prose h2 { font-size: 16.5px; }
+.prose h3 { font-size: 14.5px; }
+.prose h4 { font-size: 14px; color: var(--ink-2); }
+.prose ul, .prose ol { padding-left: 1.4em; }
+.prose li { margin: 0.2em 0; }
+.prose li::marker { color: var(--ink-3); }
+.prose hr { height: 1px; margin: 1.2em 0; border: 0; background: var(--line); }
+.prose blockquote { padding-left: 12px; border-left: 2px solid var(--line-strong); color: var(--ink-2); }
+.prose strong { font-weight: 600; }
+.prose img { max-width: 100%; border-radius: var(--r-2); }
+.prose :not(pre) > code {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--surface-3);
+  font-size: 0.88em;
+}
+.prose table { border-collapse: collapse; font-size: 13px; }
+.prose th, .prose td { padding: 5px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.prose th { color: var(--ink-2); font-weight: 600; border-bottom-color: var(--line-strong); }
+.prose input[type='checkbox'] { margin: 0 6px 0 0; accent-color: var(--ink); }
+
+.prose-sm { font-size: 13px; line-height: 1.55; }
+
+.code-block {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+}
+.code-block-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+  padding: 0 4px 0 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+.code-block pre {
+  margin: 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  font-size: 12.5px;
+  line-height: 1.55;
+  tab-size: 4;
+}
+.copy-button { color: var(--ink-3); }
+
+.link-external::after {
+  content: '↗';
+  margin-left: 1px;
+  color: var(--ink-3);
+  font-size: 0.8em;
+  text-decoration: none;
+  display: inline-block;
+}
+.link-local { text-decoration-style: dotted; }

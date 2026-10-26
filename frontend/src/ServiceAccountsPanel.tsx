@@ -74,7 +74,7 @@ export default function ServiceAccountsPanel({api = defaultAPI}: {api?: ServiceA
           {!service.unavailable && <p className="service-note">{!state ? 'Local account status unavailable.' : accounts.length ? `${accounts.length} locally saved account(s).` : 'No credentials saved.'}</p>}
           {accounts.map(account => <div className="service-saved-account" key={account.id}>
             <strong>{account.label}</strong>
-            <small>Saved locally · {localStatus(account.status)} · {account.allow_write ? 'Write/send permitted' : 'Read only'}</small>
+            <small>{localStatus(account.status)}. {account.allow_write ? 'Write and send permitted.' : 'Read only.'}</small>
             <div className="service-actions">{!service.unavailable && <button type="button" disabled={working} onClick={() => setEditor({service, account})}>Replace credentials</button>}
               <button type="button" disabled={working} onClick={() => remove(account)}>Delete account</button></div>
           </div>)}

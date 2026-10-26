@@ -89,3 +89,27 @@ func (a *App) ModelCatalog(refresh bool) []nullbot.ModelGroup {
 func (a *App) UsageSummary() nullbot.UsageSnapshot {
 	return a.bot.UsageSummary()
 }
+
+// SetAppearance stores the desktop appearance (system, light or dark) and
+// signal accent.
+func (a *App) SetAppearance(appearance, accent string) (UIState, error) {
+	appearance = strings.ToLower(strings.TrimSpace(appearance))
+	switch appearance {
+	case "", "system", "light", "dark":
+	default:
+		return UIState{}, fmt.Errorf("unknown appearance %q", appearance)
+	}
+	accent = strings.ToLower(strings.TrimSpace(accent))
+	for _, r := range accent {
+		if !(r >= 'a' && r <= 'z') && r != '-' {
+			return UIState{}, fmt.Errorf("invalid accent %q", accent)
+		}
+	}
+	if err := a.bot.UpdateConfig(func(config *nullbot.Config) {
+		config.UI.Appearance = appearance
+		config.UI.Accent = accent
+	}); err != nil {
+		return UIState{}, err
+	}
+	return a.State()
+}
