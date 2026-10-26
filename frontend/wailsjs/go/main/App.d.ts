@@ -33,6 +33,8 @@ export function CompletePath(arg1:string,arg2:string):Promise<Array<main.PathSug
 
 export function ContextWindow(arg1:string,arg2:string):Promise<any>;
 
+export function CopyPaths(arg1:any):Promise<main.FileBrowser>;
+
 export function CreateDirectory(arg1:main.FileCreateRequest):Promise<main.FileBrowser>;
 
 export function CreateFile(arg1:main.FileCreateRequest):Promise<main.FileBrowser>;
@@ -76,6 +78,8 @@ export function OpenCodexLogin():Promise<main.AccountState>;
 export function OpenExternal(arg1:string):Promise<void>;
 
 export function OpenPath(arg1:string):Promise<void>;
+
+export function OpenWith(arg1:string):Promise<void>;
 
 export function Pause():Promise<app.Reply>;
 
@@ -128,6 +132,8 @@ export function SaveSkill(arg1:main.SkillSaveRequest):Promise<main.SkillFile>;
 export function SaveUsageReport(arg1:main.UsageFilter):Promise<main.UsageReport>;
 
 export function ScheduledTasks():Promise<Array<app.ScheduledTask>>;
+
+export function SearchFiles(arg1:any):Promise<any>;
 
 export function SearchHistory(arg1:any):Promise<any>;
 

@@ -122,6 +122,23 @@ and change-driven refetch).
   messages above it stay.
 - **Skills from the `/` menu.** Picking a skill, or typing `/skill-name` at
   the start of a message, sends the message with that skill selected.
+- **Models for each role.** Settings → Models sets the manager's and the
+  subagents' models side by side, each from any provider (subagents can also
+  follow the manager), with effort, reply length, context window, and how
+  many subagents run at once. Any model ID can be typed in.
+- **Steer, pause and stop.** While a request runs: Steer reaches the manager
+  and every running subagent; a single subagent can be steered from
+  Activity. Pause lets the step under way finish, then everything waits
+  until Resume. Stop wraps up with what was done; Stop everything cancels
+  at once and holds the queue. See `nullbot/docs/RUNS.md`.
+- **Files.** Back, forward, up, home (the primary project) and Go to a path.
+  Search this folder or every subfolder (words, `*.md` patterns, a type
+  filter). Right-click: open, open with, show in file manager, attach, copy,
+  cut, paste, duplicate, copy path, rename, delete, new file or folder;
+  Ctrl/Shift-click selects several. Previews now cover Office and
+  OpenDocument files, RTF, JSON (formatted), web pages (no scripts or
+  network), audio, video, fonts, archive listings, UTF-16 and legacy text,
+  and a hex view of anything else. File types have their own icons.
 - **New look.** Clean panes, IBM Plex type, light and dark themes and five
   signal colors (Settings → Appearance). Ctrl+K opens commands; Ctrl+1–5
   switch views; Ctrl+. shows or hides the activity panel.

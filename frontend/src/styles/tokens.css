@@ -43,6 +43,8 @@
   --link: #2b5c8c;
   /* data marks (charts); validated against --surface in both modes */
   --data-1: #3a6ea5;
+  /* File types in lists: muted, so they help scanning without competing with the signal color. */
+  --tone-doc: #3a6ea5; --tone-pdf: #a8493b; --tone-code: #56658a; --tone-sheet: #2c7a57; --tone-slides: #a8641c; --tone-media: #7a4ea0; --tone-archive: #7a6545;
 
   /* overlay */
   --shadow-pop: 0 1px 2px rgb(20 24 28 / 0.08), 0 10px 32px rgb(20 24 28 / 0.14);
@@ -109,6 +111,7 @@
   --bad-soft: rgb(229 115 95 / 0.12);
   --link: #8db5df;
   --data-1: #5b93d6;
+  --tone-doc: #6d9fd8; --tone-pdf: #d98170; --tone-code: #95a3c6; --tone-sheet: #62bd93; --tone-slides: #d9a060; --tone-media: #ad8bd2; --tone-archive: #b5a07f;
   --shadow-pop: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 36px rgb(0 0 0 / 0.5);
   --scrim: rgb(0 0 0 / 0.5);
 }

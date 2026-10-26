@@ -2,7 +2,7 @@
 // newer methods; this module is the one place the UI names bridge calls.
 import * as Go from '../../wailsjs/go/main/App';
 import type {
-  AgentTask, FileBrowser, HistoryEntry, HistoryQuery, HistorySearchResult, FilePreview, MCPServerStatus, MarketState, ModelGroup, Plan, ProjectsState, Project,
+  AgentTask, FileBrowser, FileSearchKind, FileSearchResult, HistoryEntry, HistoryQuery, HistorySearchResult, FilePreview, MCPServerStatus, MarketState, ModelGroup, Plan, ProjectsState, Project,
   Reply, ScheduledTask, SessionSummary, SkillFile, SubmissionSnapshot, UIState, UsageReport,
 } from './types';
 
@@ -49,6 +49,9 @@ export const api = {
   deletePath: (path: string) => call<FileBrowser>('DeletePath', path),
   openExternal: (url: string) => call<void>('OpenExternal', url),
   openPath: (path: string) => call<void>('OpenPath', path),
+  openWith: (path: string) => call<void>('OpenWith', path),
+  searchFiles: (root: string, query: string, kind: FileSearchKind = '') => call<FileSearchResult>('SearchFiles', {root, query, kind}),
+  copyPaths: (sources: string[], dest: string, move = false) => call<FileBrowser>('CopyPaths', {sources, dest, move}),
   revealPath: (path: string) => call<void>('RevealPath', path),
 
   mcpServers: () => call<MCPServerStatus[]>('MCPServers'),

@@ -3,14 +3,12 @@ package main
 import (
 	"archive/zip"
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/csv"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io"
-	"mime"
 	"os"
 	"path/filepath"
 	"sort"
@@ -18,7 +16,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/wailsapp/wails/v2/pkg/options"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -134,6 +131,14 @@ type FilePreview struct {
 	Rows      [][]string `json:"rows,omitempty"`
 	Headers   []string   `json:"headers,omitempty"`
 	Error     string     `json:"error,omitempty"`
+	Modified  time.Time  `json:"modified"`
+	// Formatted is JSON indented for reading, when the file isn't already.
+	Formatted string `json:"formatted,omitempty"`
+	// Entries lists an archive's files; Count is how many it has in all.
+	Entries []ArchiveEntry `json:"entries,omitempty"`
+	Count   int            `json:"count,omitempty"`
+	// Hex is a dump of the start of a binary file.
+	Hex string `json:"hex,omitempty"`
 }
 
 type SaveFileRequest struct {
@@ -851,93 +856,6 @@ func (a *App) PreviewFile(path string) (FilePreview, error) {
 		return FilePreview{}, err
 	}
 	return a.previewFile(path)
-}
-
-// previewFile previews a path the caller has already authorized.
-func (a *App) previewFile(path string) (FilePreview, error) {
-	path, err := filepath.Abs(filepath.Clean(path))
-	if err != nil {
-		return FilePreview{}, err
-	}
-	info, err := os.Stat(path)
-	if err != nil {
-		return FilePreview{}, err
-	}
-	if info.IsDir() {
-		return FilePreview{}, fmt.Errorf("%s is a directory", path)
-	}
-	kind := fileKind(path)
-	ext := strings.ToLower(filepath.Ext(path))
-	mimeType := mime.TypeByExtension(ext)
-	if mimeType == "" {
-		mimeType = "application/octet-stream"
-	}
-	preview := FilePreview{
-		Path:     path,
-		Name:     filepath.Base(path),
-		Kind:     kind,
-		MIME:     mimeType,
-		Size:     info.Size(),
-		Editable: isEditableKind(kind, ext, info.Size()),
-	}
-	switch kind {
-	case "image", "pdf":
-		// Streamed by the asset server by token; no base64 copy over IPC.
-		if info.Size() > maxStreamPreviewBytes {
-			preview.Error = "File is too large for inline preview. Use Open to view it."
-			return preview, nil
-		}
-		if kind == "pdf" {
-			mimeType = "application/pdf"
-		}
-		if a.localFiles == nil {
-			a.localFiles = newLocalFiles()
-		}
-		preview.URL = a.localFiles.register(path, mimeType)
-		preview.DataURL = preview.URL
-	case "csv":
-		content, truncated, err := readTextPreview(path)
-		if err != nil {
-			return preview, err
-		}
-		preview.Content = content
-		preview.Truncated = truncated
-		preview.Headers, preview.Rows = parseCSVRows(content)
-	case "xlsx":
-		headers, rows, err := parseXLSXPreview(path)
-		if err != nil {
-			preview.Error = err.Error()
-			return preview, nil
-		}
-		preview.Headers = headers
-		preview.Rows = rows
-	case "docx":
-		text, err := extractDocxText(path)
-		if err != nil {
-			preview.Error = err.Error()
-			return preview, nil
-		}
-		preview.Content = truncateRunes(text, 60000)
-		preview.Truncated = len([]rune(text)) > 60000
-	case "markdown", "text", "code", "data":
-		content, truncated, err := readTextPreview(path)
-		if err != nil {
-			return preview, err
-		}
-		preview.Content = content
-		preview.Truncated = truncated
-	default:
-		content, truncated, err := readTextPreview(path)
-		if err == nil && utf8.ValidString(content) {
-			preview.Kind = "text"
-			preview.Editable = info.Size() <= maxPreviewBytes
-			preview.Content = content
-			preview.Truncated = truncated
-		} else {
-			preview.Error = "No inline preview is available for this binary file."
-		}
-	}
-	return preview, nil
 }
 
 // checkUIProjectPath fails closed for irregular ancestors (notably Windows
@@ -2055,30 +1973,14 @@ func envValueFor(names string) string {
 	return ""
 }
 
-func readTextPreview(path string) (string, bool, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return "", false, err
-	}
-	defer file.Close()
-	var buf bytes.Buffer
-	n, err := io.CopyN(&buf, file, maxPreviewBytes+1)
-	if err != nil && err != io.EOF {
-		return "", false, err
-	}
-	data := buf.Bytes()
-	truncated := n > maxPreviewBytes
-	if truncated {
-		data = data[:maxPreviewBytes]
-	}
-	if !utf8.Valid(data) {
-		return "", truncated, fmt.Errorf("file is not valid UTF-8 text")
-	}
-	return string(data), truncated, nil
+func parseCSVRows(content string) ([]string, [][]string) {
+	return parseRowsWith(content, ',')
 }
 
-func parseCSVRows(content string) ([]string, [][]string) {
+func parseRowsWith(content string, separator rune) ([]string, [][]string) {
 	reader := csv.NewReader(strings.NewReader(content))
+	reader.Comma = separator
+	reader.LazyQuotes = true
 	reader.FieldsPerRecord = -1
 	var rows [][]string
 	for len(rows) < 200 {
@@ -2295,46 +2197,6 @@ func zipFileByName(files []*zip.File, name string) *zip.File {
 		}
 	}
 	return nil
-}
-
-func fileKind(path string) string {
-	ext := strings.ToLower(filepath.Ext(path))
-	switch ext {
-	case ".md", ".markdown", ".mdown":
-		return "markdown"
-	case ".txt", ".log", ".out", ".err", ".ini", ".env", ".cfg", ".conf":
-		return "text"
-	case ".go", ".ts", ".tsx", ".js", ".jsx", ".json", ".yaml", ".yml", ".toml", ".xml", ".html", ".css", ".scss", ".py", ".ps1", ".sh", ".bat", ".sql", ".rs", ".java", ".c", ".cpp", ".h":
-		return "code"
-	case ".csv", ".tsv":
-		return "csv"
-	case ".xlsx", ".xlsm":
-		return "xlsx"
-	case ".docx":
-		return "docx"
-	case ".pdf":
-		return "pdf"
-	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg":
-		return "image"
-	case ".zip", ".tar", ".gz", ".tgz":
-		return "archive"
-	case ".jsonl", ".ndjson":
-		return "data"
-	default:
-		return "binary"
-	}
-}
-
-func isEditableKind(kind, ext string, size int64) bool {
-	if size > maxPreviewBytes {
-		return false
-	}
-	switch kind {
-	case "markdown", "text", "code", "csv", "data":
-		return true
-	default:
-		return false
-	}
 }
 
 func readSessionFile(path string, limit int) ([]nullbot.Message, error) {

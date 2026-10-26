@@ -96,9 +96,14 @@ func (l *localFiles) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	if strings.HasPrefix(entry.mime, "image/svg") {
+	switch {
+	case strings.HasPrefix(entry.mime, "image/svg"):
 		// Never run script from previewed SVGs.
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
+	case strings.HasPrefix(entry.mime, "text/html"):
+		// A previewed page shows its own markup and styles only: no scripts,
+		// no frames, and nothing fetched from the network or the disk.
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; sandbox")
 	}
 	http.ServeContent(w, r, filepath.Base(entry.path), info.ModTime(), file)
 }

@@ -62,6 +62,10 @@ export function ContextWindow(arg1, arg2) {
   return window['go']['main']['App']['ContextWindow'](arg1, arg2);
 }
 
+export function CopyPaths(arg1) {
+  return window['go']['main']['App']['CopyPaths'](arg1);
+}
+
 export function CreateDirectory(arg1) {
   return window['go']['main']['App']['CreateDirectory'](arg1);
 }
@@ -148,6 +152,10 @@ export function OpenExternal(arg1) {
 
 export function OpenPath(arg1) {
   return window['go']['main']['App']['OpenPath'](arg1);
+}
+
+export function OpenWith(arg1) {
+  return window['go']['main']['App']['OpenWith'](arg1);
 }
 
 export function Pause() {
@@ -252,6 +260,10 @@ export function SaveUsageReport(arg1) {
 
 export function ScheduledTasks() {
   return window['go']['main']['App']['ScheduledTasks']();
+}
+
+export function SearchFiles(arg1) {
+  return window['go']['main']['App']['SearchFiles'](arg1);
 }
 
 export function SearchHistory(arg1) {

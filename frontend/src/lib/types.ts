@@ -172,10 +172,20 @@ export type ScheduledTask = {
 
 export type FileEntry = {name: string; path: string; rel_path: string; is_dir: boolean; size: number; modified: string; extension: string; kind: string};
 export type FileBrowser = {workspace: string; current: string; parent: string; entries: FileEntry[]; error?: string};
+export type ArchiveEntry = {name: string; size: number; is_dir?: boolean};
 export type FilePreview = {
   path: string; name: string; kind: string; mime: string; size: number; editable: boolean; truncated: boolean;
   content?: string; data_url?: string; url?: string; rows?: string[][]; headers?: string[]; error?: string;
+  modified?: string;
+  /** JSON indented for reading, when the file isn't already. */
+  formatted?: string;
+  /** An archive's files, and how many it has in all. */
+  entries?: ArchiveEntry[]; count?: number;
+  /** The start of a binary file, as a hex dump. */
+  hex?: string;
 };
+export type FileSearchKind = '' | 'folder' | 'document' | 'code' | 'image' | 'sheet' | 'media' | 'archive';
+export type FileSearchResult = {root: string; entries: FileEntry[]; scanned: number; truncated: boolean; skipped?: string[]};
 
 export type SkillFile = {name: string; description: string; path: string; root: string; modified: string; size: number};
 export type SessionSummary = {session_id: string; path: string; messages: number; title?: string; preview: string; modified: string; matches?: number; snippet?: string};
