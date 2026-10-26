@@ -1,5 +1,6 @@
 import {createStore} from '../lib/store';
 import {api} from '../lib/bindings';
+import {guard} from '../lib/dirty';
 import type {MCPServerStatus, ModelGroup, ProjectsState, UIState} from '../lib/types';
 
 export type View = 'chat' | 'activity' | 'files' | 'tools' | 'history' | 'settings';
@@ -90,12 +91,16 @@ export async function refreshState() {
   return ui;
 }
 
+// Navigation asks before discarding unsaved edits in the view being left.
 export function setView(view: View) {
-  appStore.set({view});
+  if (appStore.get().view === view) return;
+  guard(() => appStore.set({view}));
 }
 
 export function openSettings(section: SettingsSection) {
-  appStore.set({view: 'settings', settingsSection: section});
+  const state = appStore.get();
+  if (state.view === 'settings' && state.settingsSection === section) return;
+  guard(() => appStore.set({view: 'settings', settingsSection: section}));
 }
 
 export function toggleInspector(open?: boolean) {
@@ -105,7 +110,7 @@ export function toggleInspector(open?: boolean) {
 }
 
 export function openFile(path: string) {
-  appStore.set({view: 'files', fileRequest: {path, nonce: Date.now()}});
+  guard(() => appStore.set({view: 'files', fileRequest: {path, nonce: Date.now()}}));
 }
 
 // ---------------------------------------------------------------- appearance

@@ -4,6 +4,7 @@ import {api} from '../../lib/bindings';
 import type {ModelGroup} from '../../lib/types';
 import {appStore, applyUIState} from '../../state/app';
 import {toast, toastError} from '../../ui/toast';
+import {useUnsavedEdits} from '../../lib/dirty';
 
 // Config paths this form owns. Saving copies only these onto the latest
 // config, so edits made elsewhere (projects, servers) are never overwritten.
@@ -51,6 +52,7 @@ export function AgentSettings() {
   const baseline = useMemo(() => JSON.stringify(managed.map(path => getPath(config, path) ?? null)), [config]);
   const current = JSON.stringify(managed.map(path => getPath(draft, path) ?? null));
   const dirty = baseline !== current;
+  useUnsavedEdits('agent-settings', dirty);
 
   // Pick up outside changes when there are no local edits.
   useEffect(() => {

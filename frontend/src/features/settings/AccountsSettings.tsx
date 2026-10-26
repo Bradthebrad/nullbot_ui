@@ -80,8 +80,11 @@ function CodexRow({account, authPath, onState}: {account?: Account; authPath?: s
   const [message, setMessage] = useState('');
   const [working, setWorking] = useState(false);
   const alive = useRef(true);
-  useEffect(() => () => {
-    alive.current = false;
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
   }, []);
 
   async function signIn() {

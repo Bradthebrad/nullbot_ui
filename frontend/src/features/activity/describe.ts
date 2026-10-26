@@ -2,7 +2,7 @@
 // "Searching the web for “acme q3”" → "Searched the web for “acme q3”" (8 results).
 import type {Step} from './model';
 import {basename, formatBytes, shorten} from '../../lib/format';
-import {hostOf} from '../../lib/links';
+import {classifyHref, hostOf} from '../../lib/links';
 
 export type StepCategory = 'search' | 'web' | 'browser' | 'email' | 'drive' | 'message' | 'document' | 'image' | 'file' | 'edit' | 'delete' | 'command' | 'agent' | 'skill' | 'nullbot' | 'tool';
 
@@ -334,7 +334,8 @@ export function resultLinks(step: Step, limit = 6): string[] {
   const meta = step.resultMeta || {};
   const fromMeta = Array.isArray(meta.links) ? (meta.links as string[]) : [];
   const fromText = String(step.result || '').match(/https?:\/\/[^\s)"'<>\]]+/g) || [];
-  return [...new Set([...fromMeta, ...fromText])].slice(0, limit);
+  // Only links the app would open in the browser, and only ones that parse.
+  return [...new Set([...fromMeta, ...fromText])].filter(link => classifyHref(link).kind === 'external').slice(0, limit);
 }
 
 export {hostOf};

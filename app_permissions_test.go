@@ -21,13 +21,16 @@ func permissionConfig(t *testing.T, permission string) nullbot.Config {
 	c.SkillDirs = []string{filepath.Join(c.AppDir, "skills")}
 	return c
 }
-func permissionApp(c nullbot.Config) *App { return &App{bot: nullbot.New(c), localFiles: newLocalFiles()} }
+func permissionApp(c nullbot.Config) *App {
+	return &App{bot: nullbot.New(c), localFiles: newLocalFiles()}
+}
 func putPermissionFile(t *testing.T, path, text string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(text), 0600); err != nil {
 		t.Fatal(err)
 	}
 }
+
 // Discovery no longer requires every project to be Full: enabled servers start
 // through the shared pool (in the primary project) and each tool call is
 // authorized separately. Disabled or unknown servers are still refused.
@@ -195,5 +198,64 @@ func TestSaveSkillSymlinkPolicy(t *testing.T) {
 				t.Fatal("symlink policy bypass")
 			}
 		})
+	}
+}
+
+// Files can only be read inside projects, and outside paths (UNC included)
+// are refused before any filesystem access.
+func TestFileReadsStayInsideProjects(t *testing.T) {
+	c := permissionConfig(t, "read-only")
+	a := permissionApp(c)
+	outside := t.TempDir()
+	putPermissionFile(t, filepath.Join(outside, "secret.txt"), "no")
+	putPermissionFile(t, filepath.Join(c.WorkspaceDir, "ok.txt"), "yes")
+	if _, err := a.PreviewFile(filepath.Join(c.WorkspaceDir, "ok.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.ListFiles(c.WorkspaceDir); err != nil {
+		t.Fatal(err)
+	}
+	unc := `\\attacker.example\share\x.md`
+	if runtime.GOOS != "windows" {
+		unc = "//attacker.example/share/x.md"
+	}
+	for _, path := range []string{filepath.Join(outside, "secret.txt"), outside, unc} {
+		if _, err := a.PreviewFile(path); err == nil || !strings.Contains(err.Error(), "outside configured projects") {
+			t.Fatalf("PreviewFile(%q) = %v", path, err)
+		}
+		if _, err := a.ListFiles(path); err == nil || !strings.Contains(err.Error(), "outside configured projects") {
+			t.Fatalf("ListFiles(%q) = %v", path, err)
+		}
+		if err := a.OpenPath(path); err == nil {
+			t.Fatalf("OpenPath(%q) allowed", path)
+		}
+	}
+	if got, _ := a.CompletePath(outside+string(filepath.Separator), ""); len(got) != 0 {
+		t.Fatalf("completion outside projects: %v", got)
+	}
+	if _, err := a.ReadSkill(filepath.Join(c.WorkspaceDir, "ok.txt")); err == nil {
+		t.Fatal("ReadSkill read a non-skill file")
+	}
+}
+
+// Delete needs the delete capability, not write: Custom projects can grant
+// either one alone.
+func TestDeleteFollowsDeleteCapability(t *testing.T) {
+	for _, tc := range []struct {
+		allow []string
+		ok    bool
+	}{
+		{[]string{"delete"}, true},
+		{[]string{"write"}, false},
+	} {
+		c := permissionConfig(t, "custom")
+		c.Projects[0].Allow = tc.allow
+		a := permissionApp(c)
+		path := filepath.Join(c.WorkspaceDir, "gone.txt")
+		putPermissionFile(t, path, "x")
+		_, err := a.DeletePath(path)
+		if (err == nil) != tc.ok {
+			t.Fatalf("allow %v: delete err = %v", tc.allow, err)
+		}
 	}
 }

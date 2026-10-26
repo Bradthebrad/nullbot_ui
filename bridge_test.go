@@ -110,3 +110,15 @@ func TestOpenPathStaysInsideProjects(t *testing.T) {
 		t.Fatal("revealed a file outside configured projects")
 	}
 }
+
+// Usage filters name days on this computer's calendar, like the buckets.
+func TestUsageDatesAreLocalDays(t *testing.T) {
+	start := parseDate("2026-10-26", false)
+	end := parseDate("2026-10-26", true)
+	if start.Location() != time.Local || start.Hour() != 0 || end.Day() != 26 || end.Hour() != 23 {
+		t.Fatalf("start %v end %v", start, end)
+	}
+	if got := parseDate("2026-10-26T09:00:00+02:00", false); got.UTC().Hour() != 7 {
+		t.Fatalf("RFC3339 offset lost: %v", got)
+	}
+}

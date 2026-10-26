@@ -4,7 +4,7 @@ import {createStore} from '../lib/store';
 import {api} from '../lib/bindings';
 import type {ActivityRecord, ChatMessage, Reply, SubmissionSnapshot} from '../lib/types';
 import {applyActivity, emptyActivity, type ActivityState} from '../features/activity/model';
-import {ingestChatStream, interruptChatStreams, localMessage, messageWithAttachmentTokens, reconcileChatHistory} from '../features/chat/transcript';
+import {ingestChatStream, localMessage, messageWithAttachmentTokens, reconcileChatHistory, settleChatStreams} from '../features/chat/transcript';
 import {makeChatRequest, submitChatRequest, type ChatMode} from '../chatSubmission';
 import type {StagedAttachment} from '../attachments';
 import {appStore, openSettings, refreshState, setView} from './app';
@@ -53,10 +53,14 @@ export const isBusy = (state: ChatState) => !!(state.submissions.busy || state.s
 // ---------------------------------------------------------------- streaming
 
 let pending: ActivityRecord[] = [];
-let scheduled = 0;
+let frame = 0;
+let timer = 0;
 
 function flushActivity() {
-  scheduled = 0;
+  if (frame) cancelAnimationFrame(frame);
+  if (timer) window.clearTimeout(timer);
+  frame = 0;
+  timer = 0;
   const batch = pending;
   pending = [];
   if (!batch.length) return;
@@ -66,21 +70,23 @@ function flushActivity() {
   chatStore.set({messages, activity: applyActivity(state.activity, batch)});
 }
 
+/**
+ * Buffers streamed records and applies them once per frame. A timer backs up
+ * the frame, which never fires while the window is minimized.
+ */
 export function queueActivity(records: ActivityRecord[]) {
   if (!records.length) return;
   pending.push(...records);
-  if (scheduled) return;
-  scheduled = document.hidden || typeof requestAnimationFrame !== 'function'
-    ? window.setTimeout(flushActivity, 120)
-    : requestAnimationFrame(flushActivity);
+  if (pending.length > 5000) {
+    flushActivity();
+    return;
+  }
+  if (!frame && typeof requestAnimationFrame === 'function' && !document.hidden) frame = requestAnimationFrame(flushActivity);
+  if (!timer) timer = window.setTimeout(flushActivity, 150);
 }
 
-/** For tests: apply queued records synchronously. */
+/** Applies queued records now. Replies flush first so they see every record sent before them. */
 export function flushActivityNow() {
-  if (scheduled) {
-    cancelAnimationFrame?.(scheduled);
-    window.clearTimeout(scheduled);
-  }
   flushActivity();
 }
 
@@ -108,6 +114,7 @@ function updateSideFromReply(reply: Reply) {
 }
 
 export function handleReply(reply: Reply) {
+  flushActivity();
   const data = reply.data || {};
   if ((data.submission_mode || data.mode) === 'also') {
     updateSideFromReply(reply);
@@ -122,16 +129,23 @@ export function handleReply(reply: Reply) {
     chatStore.set({messages: reconcileChatHistory([], reply.history || []), activity: applyActivity(emptyActivity, reply.activity || []), lastStatus: reply.message || ''});
     return;
   }
-  const interrupted = /error|failed|cancel|stopped|paused/i.test(reply.message || '');
-  chatStore.set(state => ({
-    messages: reconcileChatHistory(reply.command && !reply.command.startsWith('/') || interrupted ? interruptChatStreams(state.messages) : state.messages, reply.history || []),
-    lastStatus: reply.message || state.lastStatus,
-  }));
+  // A submission's final reply settles that submission's live stream (so the
+  // durable answer replaces it instead of appearing twice). Other replies,
+  // such as a failed plan or a command, leave live streams alone.
+  const status = String(data.submission_status || '');
+  const target = data.submission_id ? String(data.submission_id) : undefined;
+  chatStore.set(state => {
+    let messages = state.messages;
+    if (target && status === 'done') messages = settleChatStreams(messages, target, 'complete');
+    else if (target && ['error', 'canceled', 'cancelled'].includes(status)) messages = settleChatStreams(messages, target, 'incomplete');
+    return {messages: reconcileChatHistory(messages, reply.history || []), lastStatus: reply.message || state.lastStatus};
+  });
   if (reply.activity?.length) queueActivity(reply.activity);
   if (data.submissions) handleSubmissions(data.submissions);
 }
 
 export function handleSubmissions(snapshot: SubmissionSnapshot) {
+  flushActivity();
   chatStore.set(state => ({
     submissions: snapshot,
     side: state.side.map(item => {

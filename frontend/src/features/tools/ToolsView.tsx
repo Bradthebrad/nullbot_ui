@@ -6,6 +6,7 @@ import {useResource} from '../../lib/useResource';
 import {capabilityLabel, firstLine, formatCount, formatDateTime, formatDuration, relativeTime, shorten} from '../../lib/format';
 import type {MCPServerStatus, MCPToolStatus, MarketPackage, SkillFile} from '../../lib/types';
 import {appStore, applyUIState} from '../../state/app';
+import {guard, useUnsavedEdits} from '../../lib/dirty';
 import {Tabs} from '../../ui/Tabs';
 import {Blank, DetailHeader, Facts, ListGroup, ListRow, Panes, Section, Spinner, StatusTag} from '../../ui/layout';
 import {MenuButton} from '../../ui/Menu';
@@ -23,7 +24,7 @@ export function ToolsView() {
         <Tabs
           label="Tools"
           value={tab}
-          onChange={value => appStore.set({toolsTab: value})}
+          onChange={value => guard(() => appStore.set({toolsTab: value}))}
           tabs={[
             {id: 'servers', label: failing ? <>Tool servers <span className="dot bad" aria-label={`${failing} failing`} /></> : 'Tool servers', count: servers.length},
             {id: 'skills', label: 'Skills'},
@@ -154,8 +155,8 @@ function ServerDetail({summary}: {summary: MCPServerStatus}) {
             [server.remote ? 'Address' : 'Program', command ? <span className="mono wrap">{command}<CopyButton text={command} label="Copy" /></span> : ''],
             ['Runs in', !server.remote && server.cwd ? <span className="mono wrap">{server.cwd}</span> : server.remote ? 'Remote service' : ''],
             ['Process', server.pid ? <span className="num">PID {server.pid}</span> : ''],
-            ['Started', server.started_at ? formatDateTime(server.started_at) : ''],
-            ['Last used', server.last_used_at ? relativeTime(server.last_used_at) : ''],
+            ['Started', formatDateTime(server.started_at)],
+            ['Last used', relativeTime(server.last_used_at)],
             ['Calls', server.calls ? `${formatCount(server.calls)}${server.errors ? `, ${server.errors} failed` : ''}` : ''],
             ['Typical time', server.avg_latency_ms ? formatDuration(server.avg_latency_ms) : ''],
             ['Restarts', server.restarts ? String(server.restarts) : ''],
@@ -407,14 +408,14 @@ function SkillsTab() {
       list={
         <>
           <div className="pane-toolbar">
-            <button className="btn btn-sm" onClick={() => setSelected('new')}><Plus size={13} />New skill</button>
+            <button className="btn btn-sm" onClick={() => guard(() => setSelected('new'))}><Plus size={13} />New skill</button>
           </div>
           {error && <p className="notice bad pane-notice">{error}</p>}
           {!skills.length && <p className="pane-empty faint">Skills are instructions NullBot follows for a kind of task. Type / in the composer to use one.</p>}
           {roots.map(([root, list]) => (
             <ListGroup key={root} title={<span title={root}>{shorten(root.split(/[\\/]/).slice(-2).join('/'), 32)}</span>} count={list.length}>
               {list.map(skill => (
-                <ListRow key={skill.path} selected={selected !== 'new' && skill.path === current?.path} onSelect={() => setSelected(skill.path)} title={skill.name} subtitle={firstLine(skill.description, 80)} />
+                <ListRow key={skill.path} selected={selected !== 'new' && skill.path === current?.path} onSelect={() => guard(() => setSelected(skill.path))} title={skill.name} subtitle={firstLine(skill.description, 80)} />
               ))}
             </ListGroup>
           ))}
@@ -460,6 +461,7 @@ function SkillEditor({name: initialName = '', initial, onSaved, onCancel}: {name
   const [content, setContent] = useState(initial ?? skillTemplate(''));
   const [saving, setSaving] = useState(false);
   const isNew = !initialName;
+  useUnsavedEdits(`skill:${initialName || 'new'}`, content !== (initial ?? skillTemplate('')) || (isNew && !!name.trim()));
   async function save() {
     setSaving(true);
     try {
@@ -482,7 +484,7 @@ function SkillEditor({name: initialName = '', initial, onSaved, onCancel}: {name
         subtitle="The description says when the skill applies; the body says what to do."
         actions={
           <>
-            {onCancel && <button className="btn" onClick={onCancel}>Cancel</button>}
+            {onCancel && <button className="btn" onClick={() => guard(onCancel)}>Cancel</button>}
             <button className="btn btn-primary" disabled={saving || !name.trim() || !content.trim()} onClick={() => void save()}>Save skill</button>
           </>
         }

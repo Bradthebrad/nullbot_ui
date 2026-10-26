@@ -9,14 +9,32 @@ export function formatDuration(ms: number | undefined | null): string {
   return `${minutes}:${String(rest).padStart(2, '0')}`;
 }
 
+/**
+ * Go sends unset times as 0001-01-01T00:00:00Z, so anything before 1971 is
+ * treated as "no time".
+ */
+export function validTime(iso?: string | null): boolean {
+  const t = Date.parse(iso || '');
+  return Number.isFinite(t) && t > 31_536_000_000;
+}
+
+/** The first of several times that is actually set. */
+export function firstTime(...isos: (string | undefined)[]): string | undefined {
+  return isos.find(iso => validTime(iso));
+}
+
+function parseTime(iso?: string | null): number {
+  return validTime(iso) ? Date.parse(iso!) : NaN;
+}
+
 export function elapsedSince(iso: string | undefined, now = Date.now()): number {
-  const start = Date.parse(iso || '');
+  const start = parseTime(iso);
   return Number.isFinite(start) ? Math.max(0, now - start) : 0;
 }
 
 export function between(start?: string, end?: string): number | undefined {
-  const a = Date.parse(start || '');
-  const b = Date.parse(end || '');
+  const a = parseTime(start);
+  const b = parseTime(end);
   return Number.isFinite(a) && Number.isFinite(b) && b >= a ? b - a : undefined;
 }
 
@@ -47,16 +65,14 @@ export function formatCost(value: number | undefined | null): string {
 }
 
 export function formatTime(iso?: string): string {
-  if (!iso) return '';
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '';
+  if (!validTime(iso)) return '';
+  const date = new Date(iso!);
   return date.toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'});
 }
 
 export function formatDateTime(iso?: string): string {
-  if (!iso) return '';
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
+  if (!validTime(iso)) return '';
+  const date = new Date(iso!);
   const today = new Date();
   const sameDay = date.toDateString() === today.toDateString();
   return sameDay
@@ -65,7 +81,7 @@ export function formatDateTime(iso?: string): string {
 }
 
 export function relativeTime(iso?: string, now = Date.now()): string {
-  const t = Date.parse(iso || '');
+  const t = parseTime(iso);
   if (!Number.isFinite(t)) return '';
   const s = Math.round((now - t) / 1000);
   if (s < 10) return 'just now';

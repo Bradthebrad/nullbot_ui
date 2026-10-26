@@ -26,6 +26,7 @@ export function ActivityTrace() {
     if (el && follow.current) el.scrollTop = el.scrollHeight;
   }, [turns]);
 
+  // Jump to a step: expand its turn first if it is collapsed, then focus it.
   useEffect(() => {
     if (!focusStep) return;
     const el = scroller.current?.querySelector<HTMLElement>(`[data-step="${CSS.escape(focusStep)}"]`);
@@ -33,9 +34,16 @@ export function ActivityTrace() {
       follow.current = false;
       el.scrollIntoView({block: 'center'});
       el.querySelector<HTMLButtonElement>('.step-main')?.focus();
+      appStore.set({focusStep: ''});
+      return;
     }
-    appStore.set({focusStep: ''});
-  }, [focusStep]);
+    const turn = chatStore.get().activity.turns.find(t => t.steps.some(s => s.key === focusStep));
+    if (!turn || expandedTurns[turn.id] === true) {
+      appStore.set({focusStep: ''});
+      return;
+    }
+    setExpandedTurns(current => ({...current, [turn.id]: true}));
+  }, [focusStep, expandedTurns]);
 
   if (!turns.length) {
     return (
@@ -130,17 +138,32 @@ const StepRow = memo(function StepRow({step, focused}: {step: Step; focused: boo
   );
 });
 
+function pathOf(link: string): string {
+  try {
+    return new URL(link).pathname;
+  } catch {
+    return '';
+  }
+}
+
+/** The project's permission as people set it, including Custom's extras. */
+function useProjectPermission(name?: string, fallback?: string): string {
+  const project = useStore(appStore, state => state.projects?.projects.find(p => p.name === name || p.id === name));
+  return project ? permissionLabel(project.permission, project.allow) : permissionLabel(fallback);
+}
+
 function StepDetail({step}: {step: Step}) {
   const args = Object.entries(step.args || {});
   const links = resultLinks(step);
   const perm = step.permission;
+  const projectPermission = useProjectPermission(perm?.project, perm?.permission);
   return (
     <div className="step-body">
       {step.state === 'blocked' && perm && (
         <div className="notice bad step-blocked">
           <div>
             <p><strong>Not run.</strong> {perm.reason}</p>
-            <p className="muted">This call needs {capabilityLabel(perm.capability).toLowerCase()} access{perm.project ? ` in ${perm.project}` : ''}{perm.permission ? `, which is ${permissionLabel(perm.permission).toLowerCase()}` : ''}. Change the project’s permission, or change what this tool is treated as needing on the Tools page.</p>
+            <p className="muted">This call needs {capabilityLabel(perm.capability).toLowerCase()} access{perm.project ? ` in ${perm.project}` : ''}{perm.permission ? `, which is ${projectPermission.toLowerCase()}` : ''}. Change the project’s permission, or change what this tool is treated as needing on the Tools page.</p>
             <div className="btn-row">
               <button className="btn btn-sm" onClick={() => openSettings('projects')}>Project permissions</button>
               {step.server && <button className="btn btn-sm" onClick={() => appStore.set({view: 'tools', toolsTab: 'servers', selectedServer: step.server || ''})}>Tool settings</button>}
@@ -175,7 +198,7 @@ function StepDetail({step}: {step: Step}) {
           <ul className="link-list">
             {links.map(link => (
               <li key={link}>
-                <a href={link} className="link-external" title={link}>{hostOf(link)}<span className="faint"> {shorten(new URL(link, 'https://x').pathname, 40)}</span></a>
+                <a href={link} className="link-external" title={link}>{hostOf(link)}<span className="faint"> {shorten(pathOf(link), 40)}</span></a>
               </li>
             ))}
           </ul>
@@ -189,7 +212,7 @@ function StepDetail({step}: {step: Step}) {
       )}
       {perm && perm.allowed && (
         <p className="step-perm faint">
-          <span title={perm.rule}>Allowed: needs {capabilityLabel(perm.capability).toLowerCase()} access</span>{perm.project ? <> in {perm.project}, which is set to {permissionLabel(perm.permission).toLowerCase()}</> : null}.
+          <span title={perm.rule}>Allowed: needs {capabilityLabel(perm.capability).toLowerCase()} access</span>{perm.project ? <> in {perm.project}, which is set to {projectPermission.toLowerCase()}</> : null}.
         </p>
       )}
       <div className="step-foot">

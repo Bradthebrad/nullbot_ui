@@ -7,6 +7,7 @@ import App from './App';
 import {appStore} from './state/app';
 import {chatStore, flushActivityNow} from './state/chat';
 import {emptyActivity} from './features/activity/model';
+import {resetUnsavedEdits} from './lib/dirty';
 
 let bridge: FakeBridge;
 
@@ -17,6 +18,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   document.body.innerHTML = '';
+  resetUnsavedEdits();
 });
 
 async function boot(state = baseState()) {
@@ -56,6 +58,57 @@ describe('App', () => {
     expect(bridge.callsTo('OpenExternal')).toEqual([['https://status.example/history']]);
     fireEvent.click(screen.getByText('notes'));
     await waitFor(() => expect(appStore.get().view).toBe('files'));
+  });
+
+  it('routes Windows paths to Files, holds remote images until asked, and refuses network paths', async () => {
+    const state = baseState();
+    state.reply.history = [{role: 'assistant', content: 'Open [the log](C:\\work\\acme-ops\\run.log), see ![chart](https://img.example/c.png) and [share](//host/share/x).'}] as any;
+    bridge.set('ListFiles', () => ({...state.files, current: 'C:\\work\\acme-ops'}));
+    await boot(state);
+    expect(document.querySelector('img[src="https://img.example/c.png"]')).toBeNull();
+    fireEvent.click(screen.getByRole('button', {name: /Show image “chart” from img.example/}));
+    expect(document.querySelector('img[src="https://img.example/c.png"]')).not.toBeNull();
+    expect(screen.getByText('share').tagName).toBe('SPAN');
+    fireEvent.click(screen.getByText('the log'));
+    await waitFor(() => expect(bridge.callsTo('PreviewFile')).toEqual([['C:\\work\\acme-ops\\run.log']]));
+  });
+
+  it('survives a tool result with a malformed link', async () => {
+    await boot();
+    act(() => {
+      bridge.emit('activity', [
+        rec(1, {status: 'submission running'}),
+        rec(2, {status: 'tool start', call_id: 'a', tool: 'fetch_url', args: {url: 'http://[::1]:5173/'}}),
+        rec(3, {status: 'tool complete', call_id: 'a', tool: 'fetch_url', result: 'served at http://[::1]:5173/ and https://ok.example/a'}),
+      ]);
+      flushActivityNow();
+    });
+    const trace = screen.getByRole('complementary', {name: 'Activity'});
+    fireEvent.click(within(trace).getByText(/^Opened/));
+    expect(within(trace).getByText('ok.example')).toBeTruthy();
+    expect(screen.getByRole('textbox', {name: /Message NullBot/})).toBeTruthy();
+  });
+
+  it('asks before throwing away an unsaved file edit', async () => {
+    const state = baseState();
+    state.files.entries = [
+      {name: 'a.md', path: 'C:\\work\\acme-ops\\a.md', rel_path: 'a.md', is_dir: false, size: 3, modified: '2026-10-26T09:00:00Z', extension: '.md', kind: 'markdown'},
+      {name: 'b.md', path: 'C:\\work\\acme-ops\\b.md', rel_path: 'b.md', is_dir: false, size: 3, modified: '2026-10-26T09:00:00Z', extension: '.md', kind: 'markdown'},
+    ] as any;
+    bridge.set('ListFiles', () => state.files);
+    bridge.set('PreviewFile', (path: string) => ({path, name: path.split('\\').pop(), kind: 'markdown', mime: 'text/markdown', size: 3, editable: true, truncated: false, content: 'old'}));
+    await boot(state);
+    fireEvent.click(screen.getByRole('button', {name: /^Files/}));
+    fireEvent.click(await screen.findByText('a.md'));
+    fireEvent.click(await screen.findByRole('button', {name: /Edit/}));
+    fireEvent.change(screen.getByRole('textbox', {name: 'Edit a.md'}), {target: {value: 'new text'}});
+    fireEvent.click(screen.getByText('b.md'));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Discard unsaved changes?')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', {name: 'Cancel'}));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect((screen.getByRole('textbox', {name: 'Edit a.md'}) as HTMLTextAreaElement).value).toBe('new text');
+    expect(bridge.callsTo('PreviewFile')).toHaveLength(1);
   });
 
   it('describes live tool calls in words and explains permission blocks', async () => {

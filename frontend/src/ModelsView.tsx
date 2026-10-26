@@ -1,7 +1,7 @@
 // Model catalog and role assignment. Kept free of runtime helpers so tests
 // can execute it with a minimal hook harness.
 import {useEffect, useRef, useState} from 'react';
-import {Models, SetModel} from '../wailsjs/go/main/App';
+import {ModelCatalog, Models, SetModel} from '../wailsjs/go/main/App';
 import './projects-models.css';
 
 type Props = {ui: any; refreshState: () => void};
@@ -25,7 +25,8 @@ export default function ModelsView({ui, refreshState}: Props) {
     let active = true;
     setLoading(true);
     setError('');
-    Models().then(next => {if (active) setGroups(next || []);})
+    // "Refresh list" asks the providers again; the first load may use the cache.
+    (retry > 0 ? ModelCatalog(true) : Models()).then(next => {if (active) setGroups(next || []);})
       .catch(e => {if (active) setError(String(e));})
       .finally(() => {if (active) setLoading(false);});
     return () => {active = false;};

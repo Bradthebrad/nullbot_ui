@@ -75,3 +75,17 @@
   display: inline-block;
 }
 .link-local { text-decoration-style: dotted; }
+.link-blocked { color: var(--ink-2); text-decoration: line-through; text-decoration-color: var(--line-strong); cursor: not-allowed; }
+.remote-image {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.remote-image:hover { color: var(--ink); border-color: var(--ink-3); }

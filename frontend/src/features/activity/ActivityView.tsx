@@ -4,9 +4,10 @@ import {useStore} from '../../lib/store';
 import {api} from '../../lib/bindings';
 import {useResource} from '../../lib/useResource';
 import {useNow} from '../../lib/useNow';
-import {between, elapsedSince, firstLine, formatCount, formatDateTime, formatDuration, formatTime, humanizeName, relativeTime, statusText, statusTone} from '../../lib/format';
+import {between, elapsedSince, firstLine, firstTime, validTime, formatCount, formatDateTime, formatDuration, formatTime, humanizeName, relativeTime, statusText, statusTone} from '../../lib/format';
 import type {AgentTask, Plan, PlanStep, PlanSummary, ScheduledTask} from '../../lib/types';
 import {appStore, setView} from '../../state/app';
+import {guard, useUnsavedEdits} from '../../lib/dirty';
 import {Tabs} from '../../ui/Tabs';
 import {Blank, DetailHeader, Facts, ListGroup, ListRow, Panes, Section, Spinner, StatusTag} from '../../ui/layout';
 import {Markdown} from '../../ui/Markdown';
@@ -21,7 +22,7 @@ export function ActivityView() {
         <Tabs
           label="Activity"
           value={tab}
-          onChange={value => appStore.set({activityTab: value})}
+          onChange={value => guard(() => appStore.set({activityTab: value}))}
           tabs={[
             {id: 'runs', label: 'Runs'},
             {id: 'plans', label: 'Plans'},
@@ -56,7 +57,7 @@ function RunsTab() {
       tone={statusTone(task.status)}
       title={task.name || humanizeName(task.role) || task.id}
       subtitle={isLive(task) ? task.current || 'Working' : task.error ? firstLine(task.error, 80) : firstLine(task.result || task.prompt, 80)}
-      meta={isLive(task) ? formatDuration(elapsedSince(task.started_at, now)) : relativeTime(task.finished_at || task.updated_at, now)}
+      meta={isLive(task) ? formatDuration(elapsedSince(task.started_at, now)) : relativeTime(firstTime(task.finished_at, task.updated_at), now)}
     />
   );
 
@@ -79,7 +80,7 @@ function RunsTab() {
 function RunDetail({task, now, onTasks}: {task: AgentTask; now: number; onTasks: (tasks: AgentTask[]) => void}) {
   const [stopping, setStopping] = useState(false);
   const live = isLive(task);
-  const duration = live ? elapsedSince(task.started_at, now) : between(task.started_at, task.finished_at || task.updated_at);
+  const duration = live ? elapsedSince(task.started_at, now) : between(task.started_at, firstTime(task.finished_at, task.updated_at));
   const tokens = task.tokens || {};
   const cached = (tokens.cached_input || 0) + (tokens.cache_creation_input || 0);
   const calls = task.tool_calls || [];
@@ -131,7 +132,7 @@ function RunDetail({task, now, onTasks}: {task: AgentTask; now: number; onTasks:
         <Section title="Details">
           <Facts items={[
             ['Started', formatDateTime(task.started_at)],
-            ['Finished', task.finished_at ? formatDateTime(task.finished_at) : live ? 'Still running' : ''],
+            ['Finished', validTime(task.finished_at) ? formatDateTime(task.finished_at) : live ? 'Still running' : ''],
             ['Tokens in', tokens.input ? formatCount(tokens.input) : ''],
             ['Tokens out', tokens.output ? formatCount(tokens.output) : ''],
             ['From cache', cached ? formatCount(cached) : ''],
@@ -230,7 +231,7 @@ function PlansTab() {
             <ListRow
               key={item.id}
               selected={item.id === currentID}
-              onSelect={() => setSelectedID(item.id)}
+              onSelect={() => guard(() => setSelectedID(item.id))}
               tone={statusTone(item.status === 'planned' ? 'idle' : item.status)}
               title={item.name || item.id}
               subtitle={item.goal ? firstLine(item.goal, 80) : statusText(item.status)}
@@ -250,6 +251,7 @@ function PlansTab() {
 function PlanDetail({plan, onReply, onDeleted}: {plan: Plan; onReply: (reply: any) => void; onDeleted: () => void}) {
   const [editing, setEditing] = useState(false);
   const [raw, setRaw] = useState('');
+  useUnsavedEdits(`plan:${plan.id}`, editing && raw !== JSON.stringify(plan, null, 2));
   const [working, setWorking] = useState('');
   const {done, total} = planCounts(plan);
   const running = /running|executing|in.progress/i.test(plan.status || '') || plan.steps?.some(step => /running|in.progress/i.test(step.status || ''));
@@ -308,8 +310,12 @@ function PlanDetail({plan, onReply, onDeleted}: {plan: Plan; onReply: (reply: an
         actions={
           <>
             <button className="btn" onClick={() => {
+              if (editing) {
+                guard(() => setEditing(false));
+                return;
+              }
               setRaw(JSON.stringify(plan, null, 2));
-              setEditing(v => !v);
+              setEditing(true);
             }}><Pencil size={13} />{editing ? 'Stop editing' : 'Edit'}</button>
             <button className="btn btn-ghost btn-icon" title="Delete plan" aria-label="Delete plan" onClick={() => void remove()}><Trash2 size={14} /></button>
             <button className="btn btn-primary" disabled={!!working || running || !total} onClick={() => void execute()}>{working === 'execute' ? <span className="spinner" /> : <Play size={13} />}{running ? 'Running' : done ? 'Continue plan' : 'Run plan'}</button>
@@ -334,7 +340,7 @@ function PlanDetail({plan, onReply, onDeleted}: {plan: Plan; onReply: (reply: an
             <ul className="plain-list">{plan.notes!.map((note, i) => <li key={i}>{note}</li>)}</ul>
           </Section>
         )}
-        <p className="faint detail-foot">Updated {formatDateTime(plan.updated_at)}. Plan ID <span className="mono">{plan.id}</span>.</p>
+        <p className="faint detail-foot">{validTime(plan.updated_at) ? `Updated ${formatDateTime(plan.updated_at)}. ` : ''}Plan ID <span className="mono">{plan.id}</span>.</p>
       </div>
     </div>
   );
@@ -384,25 +390,27 @@ function SchedulesTab() {
       list={
         <>
           <div className="pane-toolbar">
-            <button className="btn btn-sm" onClick={() => setSelected('new')}><Plus size={13} />New schedule</button>
+            <button className="btn btn-sm" onClick={() => guard(() => setSelected('new'))}><Plus size={13} />New schedule</button>
           </div>
           {error && <p className="notice bad pane-notice">{error}</p>}
           {items.map(item => (
             <ListRow
               key={item.id}
               selected={!showForm && item.id === current?.id}
-              onSelect={() => setSelected(item.id)}
+              onSelect={() => guard(() => setSelected(item.id))}
               tone={statusTone(item.status === 'active' ? 'idle' : item.status)}
               title={item.name || firstLine(item.prompt, 60)}
-              subtitle={item.repeat_every ? `Every ${item.repeat_every}` : item.next_run_at ? `Once, ${formatDateTime(item.next_run_at)}` : statusText(item.status)}
-              meta={item.status === 'active' && item.next_run_at ? relativeIn(item.next_run_at) : ''}
+              subtitle={item.repeat_every ? `Every ${item.repeat_every}` : item.status === 'active' && validTime(item.next_run_at) ? `Once, ${formatDateTime(item.next_run_at)}` : statusText(item.status)}
+              meta={item.status === 'active' && validTime(item.next_run_at) ? relativeIn(item.next_run_at!) : ''}
             />
           ))}
         </>
       }
       detail={showForm ? <ScheduleForm onCreated={next => {
+        // The list is sorted by status and next run, so find the new one by ID.
+        const before = new Set(items.map(item => item.id));
         setData(next);
-        setSelected(next[next.length - 1]?.id || '');
+        setSelected(next.find(item => !before.has(item.id))?.id || '');
       }} onCancel={items.length ? () => setSelected('') : undefined} /> : current ? <ScheduleDetail item={current} onChange={setData} /> : null}
     />
   );
@@ -425,6 +433,7 @@ function ScheduleForm({onCreated, onCancel}: {onCreated: (items: ScheduledTask[]
   const [at, setAt] = useState(defaultAt);
   const [name, setName] = useState('');
   const [prompt, setPrompt] = useState('');
+  useUnsavedEdits('schedule-form', !!prompt.trim());
   const [saving, setSaving] = useState(false);
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -510,7 +519,7 @@ function ScheduleDetail({item, onChange}: {item: ScheduledTask; onChange: (items
           <>
             {canStop && <button className="btn" disabled={!!working} onClick={() => void act('cancel', () => api.cancelScheduledTask(item.id), 'Schedule stopped.')}>Stop schedule</button>}
             <button className="btn btn-ghost btn-icon" title="Delete schedule" aria-label="Delete schedule" disabled={!!working} onClick={async () => {
-              if (await confirmDialog({title: 'Delete this schedule?', body: 'It will not run again. Past runs stay under Runs.', confirmLabel: 'Delete', danger: true})) void act('delete', () => api.deleteScheduledTask(item.id), 'Schedule deleted.');
+              if (await confirmDialog({title: `Delete “${item.name || firstLine(item.prompt, 50)}”?`, body: 'It will not run again. Past runs stay under Runs.', confirmLabel: 'Delete', danger: true})) void act('delete', () => api.deleteScheduledTask(item.id), 'Schedule deleted.');
             }}><Trash2 size={14} /></button>
             <button className="btn btn-primary" disabled={!!working} onClick={() => void act('run', () => api.runScheduledTaskNow(item.id), 'Started. Follow it under Runs.')}><Play size={13} />Run now</button>
           </>
@@ -523,8 +532,8 @@ function ScheduleDetail({item, onChange}: {item: ScheduledTask; onChange: (items
         </Section>
         <Section title="Timing">
           <Facts items={[
-            ['Next run', item.status === 'active' && item.next_run_at ? `${formatDateTime(item.next_run_at)} (${relativeIn(item.next_run_at)})` : ''],
-            ['Last run', item.last_run_at ? formatDateTime(item.last_run_at) : 'Not yet'],
+            ['Next run', item.status === 'active' && validTime(item.next_run_at) ? `${formatDateTime(item.next_run_at)} (${relativeIn(item.next_run_at!)})` : ''],
+            ['Last run', validTime(item.last_run_at) ? formatDateTime(item.last_run_at) : 'Not yet'],
             ['Runs so far', String(item.run_count || 0)],
             ['Schedule ID', <span className="mono">{item.id}</span>],
           ]} />

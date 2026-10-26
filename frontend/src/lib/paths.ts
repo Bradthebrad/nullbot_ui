@@ -24,12 +24,13 @@ export function dirname(path: string): string {
 }
 
 function norm(path: string) {
-  const value = path.replace(/[\\/]+/g, '/').replace(/\/$/, '');
+  const value = String(path || '').replace(/[\\/]+/g, '/').replace(/\/$/, '');
   return /^[a-zA-Z]:/.test(value) ? value.toLowerCase() : value;
 }
 
 /** True when path is root or inside it. */
 export function isInside(path: string, root: string): boolean {
+  if (!path || !root) return false;
   const p = norm(path);
   const r = norm(root);
   return p === r || p.startsWith(`${r}/`);

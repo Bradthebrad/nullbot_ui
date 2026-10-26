@@ -703,9 +703,15 @@ func (a *App) Models() ([]nullbot.ModelGroup, error) {
 	return a.ModelCatalog(false), nil
 }
 
+// ListFiles lists a folder inside a project (or a file's folder).
 func (a *App) ListFiles(path string) (FileBrowser, error) {
+	config := a.bot.Config()
 	if strings.TrimSpace(path) == "" {
-		path = a.bot.Config().WorkspaceDir
+		path = config.WorkspaceDir
+	}
+	if _, err := checkUIProjectPath(config, path, false, false); err != nil {
+		workspace, _ := filepath.Abs(config.WorkspaceDir)
+		return FileBrowser{Workspace: workspace, Current: path, Error: err.Error()}, err
 	}
 	return a.listFiles(path)
 }
@@ -726,6 +732,9 @@ func (a *App) CompletePath(input, baseDir string) ([]PathSuggestion, error) {
 		target = filepath.Join(base, target)
 	}
 	target = filepath.Clean(target)
+	if !nullbot.PathLexicallyInProjects(config, target) && !nullbot.PathLexicallyInProjects(config, filepath.Dir(target)) {
+		return nil, nil
+	}
 
 	parent := target
 	prefix := ""
@@ -738,15 +747,17 @@ func (a *App) CompletePath(input, baseDir string) ([]PathSuggestion, error) {
 		}
 	}
 
+	// Only complete inside projects: refuse other paths (including UNC paths)
+	// before touching the filesystem.
+	if !nullbot.PathLexicallyInProjects(config, parent) {
+		return nil, nil
+	}
 	suggestions, err := readPathSuggestions(parent, prefix)
 	if err != nil {
 		return nil, err
 	}
 	if len(suggestions) == 0 && isBareRelativePath(input) {
 		fallbackRoots := []string{config.WorkspaceDir}
-		if home, err := os.UserHomeDir(); err == nil {
-			fallbackRoots = append(fallbackRoots, home)
-		}
 		for _, root := range fallbackRoots {
 			root, err := filepath.Abs(filepath.Clean(root))
 			if err != nil || samePath(root, parent) {
@@ -788,7 +799,16 @@ func (a *App) SetWorkingDirectory(path string) (FileBrowser, error) {
 	return a.listFiles(path)
 }
 
+// PreviewFile previews a file inside a project.
 func (a *App) PreviewFile(path string) (FilePreview, error) {
+	if _, err := checkUIProjectPath(a.bot.Config(), path, false, false); err != nil {
+		return FilePreview{}, err
+	}
+	return a.previewFile(path)
+}
+
+// previewFile previews a path the caller has already authorized.
+func (a *App) previewFile(path string) (FilePreview, error) {
 	path, err := filepath.Abs(filepath.Clean(path))
 	if err != nil {
 		return FilePreview{}, err
@@ -878,6 +898,20 @@ func (a *App) PreviewFile(path string) (FilePreview, error) {
 // junctions, which current Go EvalSymlinks does not resolve), then delegates
 // canonical path and overlapping-grant authorization to the shared policy.
 func checkUIProjectPath(config nullbot.Config, path string, write, tree bool) (string, error) {
+	capability := nullbot.CapRead
+	if write {
+		capability = nullbot.CapWrite
+	}
+	return checkUIProjectAccess(config, path, capability, tree)
+}
+
+// checkUIProjectAccess is checkUIProjectPath for one capability. Paths outside
+// every project are refused before any filesystem access, so a link to
+// \\host\share in a bot reply can't make the app open a network connection.
+func checkUIProjectAccess(config nullbot.Config, path string, capability nullbot.Capability, tree bool) (string, error) {
+	if !nullbot.PathLexicallyInProjects(config, path) {
+		return "", fmt.Errorf("path is outside configured projects")
+	}
 	checkAncestors := func(path string) error {
 		abs, err := filepath.Abs(path)
 		if err != nil {
@@ -913,7 +947,7 @@ func checkUIProjectPath(config nullbot.Config, path string, write, tree bool) (s
 			return "", err
 		}
 	}
-	resolved, err := nullbot.CheckProjectPath(config, path, write, tree)
+	resolved, err := nullbot.CheckProjectAccess(config, path, capability, tree)
 	if err != nil {
 		return "", err
 	}
@@ -931,7 +965,7 @@ func (a *App) SaveFile(req SaveFileRequest) (FilePreview, error) {
 	if len(req.Content) > maxPreviewBytes {
 		return FilePreview{}, fmt.Errorf("edited content exceeds %d bytes", maxPreviewBytes)
 	}
-	preview, err := a.PreviewFile(path)
+	preview, err := a.previewFile(path)
 	if err != nil {
 		return FilePreview{}, err
 	}
@@ -941,7 +975,7 @@ func (a *App) SaveFile(req SaveFileRequest) (FilePreview, error) {
 	if err := os.WriteFile(path, []byte(req.Content), 0600); err != nil {
 		return FilePreview{}, err
 	}
-	return a.PreviewFile(path)
+	return a.previewFile(path)
 }
 
 func (a *App) CreateDirectory(req FileCreateRequest) (FileBrowser, error) {
@@ -1010,7 +1044,7 @@ func (a *App) RenamePath(req FileRenameRequest) (FileBrowser, error) {
 }
 
 func (a *App) DeletePath(path string) (FileBrowser, error) {
-	path, err := checkUIProjectPath(a.bot.Config(), path, true, true)
+	path, err := checkUIProjectAccess(a.bot.Config(), path, nullbot.CapDelete, true)
 	if err != nil {
 		return FileBrowser{}, err
 	}
@@ -1090,8 +1124,25 @@ func (a *App) Skills() ([]SkillFile, error) {
 	return out, nil
 }
 
+// ReadSkill previews a SKILL.md inside a configured skill folder.
 func (a *App) ReadSkill(path string) (FilePreview, error) {
-	return a.PreviewFile(path)
+	config := a.bot.Config()
+	roots := append([]string{filepath.Join(config.AppDir, "skills")}, config.SkillDirs...)
+	skillConfig := config
+	skillConfig.Projects = nil
+	for i, root := range roots {
+		if strings.TrimSpace(root) != "" {
+			skillConfig.Projects = append(skillConfig.Projects, nullbot.Project{ID: fmt.Sprintf("skills-%d", i), Name: "skills", Path: root, Permission: "read-only"})
+		}
+	}
+	if !strings.EqualFold(filepath.Base(path), "SKILL.md") || len(skillConfig.Projects) == 0 {
+		return FilePreview{}, fmt.Errorf("not a skill file")
+	}
+	resolved, err := checkUIProjectPath(skillConfig, path, false, false)
+	if err != nil {
+		return FilePreview{}, err
+	}
+	return a.previewFile(resolved)
 }
 
 func (a *App) SaveSkill(req SkillSaveRequest) (SkillFile, error) {
@@ -2282,13 +2333,16 @@ func parseDate(value string, endOfDay bool) time.Time {
 	if value == "" {
 		return time.Time{}
 	}
-	for _, layout := range []string{time.RFC3339, "2006-01-02"} {
-		if t, err := time.Parse(layout, value); err == nil {
-			if endOfDay && layout == "2006-01-02" {
-				return t.Add(24*time.Hour - time.Nanosecond)
-			}
-			return t
+	if t, err := time.Parse(time.RFC3339, value); err == nil {
+		return t
+	}
+	// A bare date is a day on this computer's calendar, matching the
+	// local-time buckets the report groups by.
+	if t, err := time.ParseInLocation("2006-01-02", value, time.Local); err == nil {
+		if endOfDay {
+			return t.AddDate(0, 0, 1).Add(-time.Nanosecond)
 		}
+		return t
 	}
 	return time.Time{}
 }

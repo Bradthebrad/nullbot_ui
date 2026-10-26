@@ -9,9 +9,16 @@ describe('classifyHref', () => {
 
   it('treats file paths and relative references as local files', () => {
     expect(classifyHref('C:\\work\\acme\\a.md')).toEqual({kind: 'local', path: 'C:\\work\\acme\\a.md'});
-    expect(classifyHref('\\\\server\\share\\a.md')).toEqual({kind: 'local', path: '\\\\server\\share\\a.md'});
+    expect(classifyHref('C:/work/acme/a.md')).toEqual({kind: 'local', path: 'C:/work/acme/a.md'});
     expect(classifyHref('runbooks/escalation%20policy.md#top')).toEqual({kind: 'local', path: 'runbooks/escalation policy.md'});
     expect(classifyHref('file:///C:/work/a.md')).toEqual({kind: 'local', path: 'C:\\work\\a.md'});
+  });
+
+  it('never follows network locations, however they are spelled', () => {
+    for (const href of ['\\\\host\\share\\x.md', '//host/share/x.md', 'file://host/share/x.md', '%5C%5Chost%5Cshare%5Cx.md']) {
+      expect(classifyHref(href).kind, href).toBe('blocked');
+    }
+    expect(classifyHref('file://localhost/C:/work/a.md')).toEqual({kind: 'local', path: 'C:\\work\\a.md'});
   });
 
   it('keeps in-page anchors and blocks everything else', () => {
@@ -73,5 +80,12 @@ describe('installLinkInterceptor', () => {
     uninstall();
     uninstall = () => {};
     expect(window.open).toBe(original);
+  });
+});
+
+describe('classifyHref with Markdown-encoded paths', () => {
+  it('decodes the backslashes Markdown percent-encodes', () => {
+    expect(classifyHref('C:%5Cwork%5Ca.md')).toEqual({kind: 'local', path: 'C:\\work\\a.md'});
+    expect(classifyHref('%5C%5Chost%5Cshare').kind).toBe('blocked');
   });
 });

@@ -10,19 +10,39 @@ export type LinkTarget =
   | {kind: 'blocked'; reason: string};
 
 const windowsPath = /^[a-zA-Z]:[\\/]/;
+const networkPath = /^[\\/]{2}/;
+const networkBlocked: LinkTarget = {kind: 'blocked', reason: 'Links to network locations are not opened from NullBot'};
+
+function local(path: string): LinkTarget {
+  return networkPath.test(path) ? networkBlocked : {kind: 'local', path};
+}
+
+function safeDecode(value: string): string {
+  try {
+    return decodeURI(value);
+  } catch {
+    return value;
+  }
+}
 
 export function classifyHref(raw: string | null | undefined): LinkTarget {
-  const href = String(raw || '').trim();
+  let href = String(raw || '').trim();
+  // Markdown percent-encodes backslashes, so C:\work arrives as C:%5Cwork.
+  if (/^([a-zA-Z]:)?%5c/i.test(href)) href = safeDecode(href);
   if (!href) return {kind: 'blocked', reason: 'Empty link'};
   if (href.startsWith('#')) return {kind: 'anchor', id: href.slice(1)};
-  if (windowsPath.test(href) || href.startsWith('\\\\')) return {kind: 'local', path: href};
+  // Network paths (\\host\share, //host/share, file://host/...) would make the
+  // system connect to that host just to look the path up, so they are never
+  // followed from the app.
+  if (networkPath.test(href)) return networkBlocked;
+  if (windowsPath.test(href)) return local(href);
   const scheme = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(href)?.[1]?.toLowerCase();
   if (!scheme) {
     // Relative references in bot replies refer to files in the primary project.
     try {
-      return {kind: 'local', path: decodeURI(href.split(/[?#]/)[0])};
+      return local(decodeURI(href.split(/[?#]/)[0]));
     } catch {
-      return {kind: 'local', path: href.split(/[?#]/)[0]};
+      return local(href.split(/[?#]/)[0]);
     }
   }
   switch (scheme) {
@@ -32,7 +52,7 @@ export function classifyHref(raw: string | null | undefined): LinkTarget {
         const url = new URL(href);
         // Links to the app's own origin (e.g. a relative link resolved by the
         // browser) are treated as local paths, never navigated.
-        if (url.host === window.location.host) return {kind: 'local', path: decodeURIComponent(url.pathname.replace(/^\//, ''))};
+        if (url.host === window.location.host) return local(decodeURIComponent(url.pathname.replace(/^\//, '')));
         return {kind: 'external', url: url.toString()};
       } catch {
         return {kind: 'blocked', reason: 'Malformed link'};
@@ -42,10 +62,10 @@ export function classifyHref(raw: string | null | undefined): LinkTarget {
     case 'file':
       try {
         const url = new URL(href);
+        if (url.host && url.host !== 'localhost') return networkBlocked;
         let path = decodeURIComponent(url.pathname);
         if (/^\/[a-zA-Z]:/.test(path)) path = path.slice(1).replace(/\//g, '\\');
-        if (url.host && url.host !== 'localhost') path = `\\\\${url.host}${path.replace(/\//g, '\\')}`;
-        return {kind: 'local', path};
+        return local(path);
       } catch {
         return {kind: 'blocked', reason: 'Malformed file link'};
       }

@@ -15,7 +15,10 @@ import {ToolsView} from './features/tools/ToolsView';
 import {HistoryView} from './features/history/HistoryView';
 import {SettingsView} from './features/settings/SettingsView';
 import {DialogHost} from './ui/dialogs';
+import {ErrorBoundary} from './ui/ErrorBoundary';
 import {ToastHost, toast, toastError} from './ui/toast';
+
+const viewNames = {chat: 'The conversation', activity: 'Activity', files: 'Files', tools: 'Tools', history: 'History', settings: 'Settings'} as const;
 
 export default function App() {
   const ready = useStore(appStore, state => state.ready);
@@ -35,11 +38,17 @@ export default function App() {
       .catch(err => appStore.set({ready: true, error: String(err instanceof Error ? err.message : err)}));
 
     let configTimer = 0;
+    let mcpTimer = 0;
     const offs = [
       onActivity(queueActivity),
       onReply(handleReply),
       onSubmissions(handleSubmissions),
-      onMCP(servers => appStore.set({mcp: servers})),
+      onMCP(servers => {
+        appStore.set({mcp: servers});
+        // Views showing one server's details refetch, at most a few times a second.
+        window.clearTimeout(mcpTimer);
+        mcpTimer = window.setTimeout(() => bumpVersion('mcp'), 400);
+      }),
       onChanged(({topic}) => {
         bumpVersion(topic);
         if (topic === 'config') {
@@ -76,6 +85,8 @@ export default function App() {
     window.addEventListener('keydown', onKey);
     return () => {
       disposed = true;
+      window.clearTimeout(configTimer);
+      window.clearTimeout(mcpTimer);
       offs.forEach(off => off());
       window.removeEventListener('keydown', onKey);
     };
@@ -98,12 +109,16 @@ export default function App() {
           ) : (
             <>
               {/* Chat stays mounted so drafts, attachments and scroll position survive navigation. */}
-              <div className="view-slot" hidden={view !== 'chat'}><ChatView active={view === 'chat'} /></div>
-              {view === 'activity' && <ActivityView />}
-              {view === 'files' && <FilesView />}
-              {view === 'tools' && <ToolsView />}
-              {view === 'history' && <HistoryView />}
-              {view === 'settings' && <SettingsView />}
+              <div className="view-slot" hidden={view !== 'chat'}><ErrorBoundary area="The conversation"><ChatView active={view === 'chat'} /></ErrorBoundary></div>
+              {view !== 'chat' && (
+                <ErrorBoundary area={viewNames[view]} resetKey={view}>
+                  {view === 'activity' && <ActivityView />}
+                  {view === 'files' && <FilesView />}
+                  {view === 'tools' && <ToolsView />}
+                  {view === 'history' && <HistoryView />}
+                  {view === 'settings' && <SettingsView />}
+                </ErrorBoundary>
+              )}
             </>
           )}
         </main>

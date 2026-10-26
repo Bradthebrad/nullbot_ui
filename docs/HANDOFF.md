@@ -10,8 +10,8 @@ left.
 | Repo | Branch commits (oldest first) |
 | --- | --- |
 | tinychain | `eac2c06` MCP: spec metadata, multiplexed stdio, roots, remote sessions, tree kill |
-| nullbot | `0dcb3f5` WIP snapshot of your uncommitted service-accounts work, then `158724b` permissions, MCP session pool, bounded memory; `0591fc2` network-free model lists; `1f1a1b6` appearance and accent config |
-| nullbot_ui | `ff2ff9f` WIP snapshot of your uncommitted service-accounts work, then `bf76dd2` bridge (batched activity, push events, streamed previews, safe links); the redesign commit after it |
+| nullbot | `0dcb3f5` WIP snapshot of your uncommitted service-accounts work, then `158724b` permissions, MCP session pool, bounded memory; `0591fc2` network-free model lists; `1f1a1b6` appearance and accent config; `c5f2fe4` access checks per capability, outside paths refused before any I/O |
+| nullbot_ui | `ff2ff9f` WIP snapshot of your uncommitted service-accounts work, then `bf76dd2` bridge (batched activity, push events, streamed previews, safe links); `4f59f73` the redesign; then this handoff and the fixes from an independent review |
 
 The two WIP commits are your local, uncommitted work as it was on your disk
 on 26 October, so nothing of yours was lost. They are also on
@@ -90,7 +90,15 @@ and change-driven refetch).
   say which project and permission stopped them. No raw JSON.
 - **Links open in your browser.** Web and mail links open in the system
   browser; file paths open in Files (Ctrl+click opens them in the system
-  app). Nothing navigates the app window.
+  app). Nothing navigates the app window. Links to network shares
+  (`\\host\share`, `//host/...`) are never followed, and images from the
+  web in a reply load only when you click them, so a reply can't make the
+  app contact another machine on its own.
+- **Files stays inside projects.** The Files view, previews, path
+  completion and "open with the system app" only reach folders inside your
+  projects, and the backend refuses anything else before touching the
+  disk. Deleting needs the project's delete permission; editing and
+  renaming need write. Unsaved edits ask before they're discarded.
 - **Memory stays flat.** Streamed tokens are batched, nothing polls, and the
   activity history is capped.
 - **New look.** Clean panes, IBM Plex type, light and dark themes and five

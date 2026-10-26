@@ -62,26 +62,53 @@ const components: Components = {
   },
   a({href, children}) {
     const target = classifyHref(href);
+    if (target.kind === 'blocked') return <span className="link-blocked" title={target.reason}>{children}</span>;
     const external = target.kind === 'external';
     return (
-      <a href={href} className={external ? 'link-external' : target.kind === 'local' ? 'link-local' : undefined} title={external ? (target as any).url : target.kind === 'local' ? `Open ${target.path} (Ctrl+click to open with the system app)` : undefined}>
+      <a href={href} className={external ? 'link-external' : target.kind === 'local' ? 'link-local' : undefined} title={external ? target.url : target.kind === 'local' ? `Open ${target.path} (Ctrl+click to open with the system app)` : undefined}>
         {children}
       </a>
     );
   },
   img({src, alt}) {
-    const ok = typeof src === 'string' && (/^https:\/\//.test(src) || /^data:image\/(png|jpe?g|gif|webp);/.test(src) || src.startsWith('/__local/'));
-    return ok ? <img src={src} alt={alt || ''} loading="lazy" /> : <span className="faint">[image: {alt || 'not shown'}]</span>;
+    if (typeof src !== 'string') return null;
+    if (/^data:image\/(png|jpe?g|gif|webp);/.test(src) || src.startsWith('/__local/')) return <img src={src} alt={alt || ''} loading="lazy" />;
+    if (/^https:\/\//.test(src)) return <RemoteImage src={src} alt={alt || ''} />;
+    return <span className="faint">[image: {alt || 'not shown'}]</span>;
   },
   table({children}) {
     return <div className="table-scroll"><table>{children}</table></div>;
   },
 };
 
+/**
+ * Remote images load only when asked: an image URL in a reply could carry
+ * data out to its host the moment it rendered.
+ */
+function RemoteImage({src, alt}: {src: string; alt: string}) {
+  const [shown, setShown] = useState(false);
+  if (shown) return <img src={src} alt={alt} loading="lazy" referrerPolicy="no-referrer" />;
+  let host = src;
+  try {
+    host = new URL(src).host;
+  } catch {
+    /* shown as given */
+  }
+  return (
+    <button type="button" className="remote-image" onClick={() => setShown(true)} title={src}>
+      Show image{alt ? ` “${alt}”` : ''} from {host}
+    </button>
+  );
+}
+
+// Links and images are judged by the components above, so URLs pass through
+// unchanged (the default transform would empty Windows paths like C:\…).
+const keepUrl = (url: string) => url;
+
 function MarkdownInner({children, className = 'prose'}: {children: string; className?: string}) {
   return (
     <div className={className}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components} urlTransform={keepUrl}>
         {children || ''}
       </ReactMarkdown>
     </div>

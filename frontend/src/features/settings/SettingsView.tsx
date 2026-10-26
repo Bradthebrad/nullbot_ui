@@ -1,6 +1,7 @@
 import {useEffect, useState} from 'react';
 import {useStore} from '../../lib/store';
 import {api} from '../../lib/bindings';
+import {guard, useUnsavedEdits} from '../../lib/dirty';
 import {appStore, accents, applyAppearance, applyUIState, refreshState, type SettingsSection} from '../../state/app';
 import ProjectsView from '../../ProjectsView';
 import ModelsView from '../../ModelsView';
@@ -27,7 +28,7 @@ export function SettingsView() {
     <div className="view settings">
       <nav className="settings-nav" aria-label="Settings">
         {sections.map(item => (
-          <button key={item.id} className={item.id === section ? 'settings-link active' : 'settings-link'} aria-current={item.id === section ? 'page' : undefined} onClick={() => appStore.set({settingsSection: item.id})}>
+          <button key={item.id} className={item.id === section ? 'settings-link active' : 'settings-link'} aria-current={item.id === section ? 'page' : undefined} onClick={() => guard(() => appStore.set({settingsSection: item.id}))}>
             <span>{item.label}</span>
             <small className="faint">{item.hint}</small>
           </button>
@@ -49,8 +50,11 @@ export function SettingsView() {
 }
 
 function ProjectsSettings() {
+  const [dirty, setDirty] = useState(false);
+  useUnsavedEdits('projects', dirty);
   return (
     <ProjectsView
+      onDirtyChange={setDirty}
       load={api.projects}
       save={api.saveProjects}
       onSaved={state => {

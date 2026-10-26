@@ -12,6 +12,8 @@ type Props = {
   onSaved?: (state: ProjectsState) => void;
   /** Asks before granting new access. Defaults to window.confirm. */
   confirm?: (title: string, body: string) => boolean | Promise<boolean>;
+  /** Told when there are (or are no longer) unsaved changes. */
+  onDirtyChange?: (dirty: boolean) => void;
 };
 
 const fullWarning = 'Run programs lets tools run commands and start local tool servers in the folder. Tool servers are separate programs: NullBot checks every tool call against your project permissions, but it cannot sandbox what a server’s own code does.';
@@ -36,7 +38,7 @@ function folderName(path: string) {
   return path.split(/[\\/]+/).filter(Boolean).pop() || 'Project';
 }
 
-export default function ProjectsView({load, save, onSaved, confirm}: Props) {
+export default function ProjectsView({load, save, onSaved, confirm, onDirtyChange}: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [primary, setPrimary] = useState('');
   const [loaded, setLoaded] = useState<ProjectsState | null>(null);
@@ -65,6 +67,10 @@ export default function ProjectsView({load, save, onSaved, confirm}: Props) {
       .finally(() => {if (active) setLoading(false);});
     return () => {active = false;};
   }, [load, retry]);
+
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty]);
 
   function update(id: string, patch: Partial<Project>) {
     setProjects(rows => rows.map(p => {

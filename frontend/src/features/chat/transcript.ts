@@ -201,6 +201,11 @@ export function reconcileChatHistory(current: any[], history: any[]) {
   return result;
 }
 
-export function interruptChatStreams(messages: any[]) {
-  return messages.map(message => message.streamKey && message.pending ? {...message, pending: false, streamState: 'incomplete'} : message);
+/** Ends live streams (all, or one submission's) as complete or cut short. */
+export function settleChatStreams(messages: any[], submissionId: string | undefined, streamState: 'complete' | 'incomplete') {
+  return messages.map(message => message.streamKey && message.pending && (!submissionId || message.submission_id === submissionId) ? {...message, pending: false, streamState} : message);
+}
+
+export function interruptChatStreams(messages: any[], submissionId?: string) {
+  return settleChatStreams(messages, submissionId, 'incomplete');
 }

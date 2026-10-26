@@ -8,6 +8,7 @@ import {Markdown} from '../../ui/Markdown';
 import {Transcript} from './Transcript';
 import {Composer} from './Composer';
 import {Inspector} from './Inspector';
+import {ErrorBoundary} from '../../ui/ErrorBoundary';
 
 function readWidth() {
   try {
@@ -35,7 +36,7 @@ export function ChatView({active}: {active: boolean}) {
   return (
     <section ref={container} className={`chat ${inspectorOpen ? 'with-inspector' : ''}`} style={{'--inspector-w': `${inspectorWidth}px`} as React.CSSProperties} aria-label="Chat">
       <div className="chat-main" id="chat-main">
-        <Transcript />
+        <ErrorBoundary area="The transcript"><Transcript /></ErrorBoundary>
         <div className="chat-footer">
           {output && (
             <div className="command-output">
@@ -55,7 +56,7 @@ export function ChatView({active}: {active: boolean}) {
             setWidth(value);
             writePref('nullbot.inspectorWidth', value);
           }} />
-          <Inspector />
+          <ErrorBoundary area="The activity panel"><Inspector /></ErrorBoundary>
         </>
       )}
     </section>
