@@ -52,6 +52,7 @@ export function AgentSettings() {
   const baseline = useMemo(() => JSON.stringify(managed.map(path => getPath(config, path) ?? null)), [config]);
   const current = JSON.stringify(managed.map(path => getPath(draft, path) ?? null));
   const dirty = baseline !== current;
+  const invalid = invalidWindows(getPath(draft, 'compaction.context_windows'));
   useUnsavedEdits('agent-settings', dirty);
 
   // Pick up outside changes when there are no local edits.
@@ -110,7 +111,8 @@ export function AgentSettings() {
           <PercentField label="Shorten tool results at" help="Results the model has already read become the tool, its arguments and the start of the output. Skills are never shortened." value={val('compaction.shorten_ratio')} fallback={0.6} onChange={v => set('compaction.shorten_ratio', v)} />
           <PercentField label="Summarize at" help="If shortening isn’t enough, the model summarizes older messages. Recent ones stay word for word." value={val('compaction.summarize_ratio')} fallback={0.85} onChange={v => set('compaction.summarize_ratio', v)} />
         </div>
-        <Check label="Summarize automatically" checked={!!val('compaction.enabled')} onChange={v => set('compaction.enabled', v)} />
+        <Check label="Shorten and summarize automatically" checked={!!val('compaction.enabled')} onChange={v => set('compaction.enabled', v)} />
+        {!val('compaction.enabled') && <p className="faint">Off: nothing is shortened or summarized, so long requests can fail once the window fills. Tool results that wouldn’t fit are still cut.</p>}
         <div className="form-grid">
           <PercentField label="Earlier messages in a new request" help="How much of the window the conversation so far may take. Older messages stay readable through history search." value={val('compaction.history_ratio')} fallback={0.3} max={60} onChange={v => set('compaction.history_ratio', v)} />
           <NumberField label="Characters kept from a shortened result" value={val('compaction.tool_digest_chars')} onChange={v => set('compaction.tool_digest_chars', v)} />
@@ -141,9 +143,9 @@ export function AgentSettings() {
       </Group>
 
       <footer className={`save-bar ${dirty ? 'is-dirty' : ''}`}>
-        <div className="save-bar-text">{dirty ? <strong>You have unsaved changes.</strong> : <span className="muted">Settings are up to date.</span>}</div>
+        <div className="save-bar-text">{invalid ? <strong className="bad-text">A context window must be at least 1,024 tokens.</strong> : dirty ? <strong>You have unsaved changes.</strong> : <span className="muted">Settings are up to date.</span>}</div>
         {dirty && <button className="btn" onClick={() => setDraft(structuredClone(config))}>Discard</button>}
-        <button className="btn btn-primary" disabled={!dirty || saving} onClick={() => void save()}>Save settings</button>
+        <button className="btn btn-primary" disabled={!dirty || saving || invalid} onClick={() => void save()}>Save settings</button>
       </footer>
     </section>
   );
@@ -182,6 +184,12 @@ function PercentField({label, value, fallback, onChange, help, max = 95}: {label
   );
 }
 
+const minWindow = 1024;
+
+export function invalidWindows(windows?: Record<string, number>): boolean {
+  return Object.values(windows || {}).some(tokens => tokens > 0 && tokens < minWindow);
+}
+
 const windowSource: Record<string, string> = {
   override: 'Your setting',
   provider: 'Reported by the provider',
@@ -207,21 +215,25 @@ function ContextWindowField({provider, model, overrides, onOverride}: {provider?
   const key = provider && model ? `${provider.toLowerCase()}/${model}` : '';
   const base = useBaseWindow(provider, model);
   const override = key ? overrides[key] : undefined;
+  // Keep what is typed, even while it is still too small to save, so the
+  // field can be edited digit by digit; saving waits until it is valid.
   const set = (tokens: number) => {
     const next = {...overrides};
-    if (tokens >= 1024) next[key] = tokens;
+    if (tokens > 0) next[key] = Math.floor(tokens);
     else delete next[key];
     onOverride(next);
   };
   const sourceText = base ? windowSource[base.source] || '' : '';
+  const tooSmall = !!override && override < minWindow;
   return (
     <label className="field">
       <span>Context window (tokens)</span>
-      <input className="input num" type="number" min={0} disabled={!key} placeholder={base ? base.tokens.toLocaleString() : ''} value={override || ''} onChange={event => set(Number(event.target.value || 0))} />
-      <small>
-        {!base ? 'Looking up the size…'
-          : override ? `Your setting. Clear it to use ${base.tokens.toLocaleString()} (${sourceText.toLowerCase()}).`
-            : `${sourceText}. Enter a number to override it.`}
+      <input className="input num" type="number" min={0} disabled={!key} aria-invalid={tooSmall} placeholder={base ? base.tokens.toLocaleString() : ''} value={override || ''} onChange={event => set(Number(event.target.value || 0))} />
+      <small className={tooSmall ? 'bad-text' : undefined}>
+        {tooSmall ? `Use at least ${minWindow.toLocaleString()} tokens, or clear the field.`
+          : !base ? 'Looking up the size…'
+            : override ? `Your setting. Clear it to use ${base.tokens.toLocaleString()} (${sourceText.toLowerCase()}).`
+              : `${sourceText}. Enter a number to override it.`}
       </small>
     </label>
   );

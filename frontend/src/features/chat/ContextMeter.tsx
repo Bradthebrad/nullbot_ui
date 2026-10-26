@@ -24,8 +24,8 @@ export function ContextMeter() {
   const summarizeAt = context.summarizeAt ? context.summarizeAt / context.window : undefined;
   const level = summarizeAt && ratio >= summarizeAt ? 'full' : shortenAt && ratio >= shortenAt ? 'busy' : 'calm';
   const summary = `About ${formatTokens(context.tokens)} of ${formatTokens(context.window)} tokens in the last request.`;
-  const thresholds = shortenAt && summarizeAt
-    ? `Earlier tool results are shortened from ${Math.round(shortenAt * 100)}% and older messages summarized from ${Math.round(summarizeAt * 100)}%.`
+  const thresholds = context.shortenAt && context.summarizeAt
+    ? `Earlier tool results are shortened from about ${formatTokens(context.shortenAt)} tokens, and older messages summarized from about ${formatTokens(context.summarizeAt)}.`
     : '';
   return (
     <MenuButton
@@ -48,7 +48,7 @@ export function ContextMeter() {
         {kind: 'heading', label: summary},
         ...(thresholds ? [{kind: 'heading' as const, label: thresholds}] : []),
         {kind: 'separator'},
-        {label: busy ? 'Compact when this request ends' : 'Compact the conversation', disabled: busy, onSelect: () => void compactConversation('')},
+        {label: busy ? 'Compacting waits for this request to finish' : 'Compact the conversation', disabled: busy, onSelect: () => void compactConversation('')},
         {label: 'Context settings', onSelect: () => openSettings('agent')},
       ]}
     />
