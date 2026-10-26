@@ -21,6 +21,7 @@ export const api = {
   resume: () => call<Reply>('Resume'),
   analyze: (focus: string) => call<Reply>('Analyze', focus),
   compact: (focus: string) => call<Reply>('CompactConversation', focus),
+  contextWindow: (provider: string, model: string) => call<{tokens: number; source: string; detail?: string}>('ContextWindow', provider, model),
   chatSubmissionState: () => call<SubmissionSnapshot>('ChatSubmissionState'),
 
   saveConfig: (config: any, keys: any) => call<UIState>('SaveConfig', config, keys),

@@ -107,6 +107,21 @@ and change-driven refetch).
   `history_session_read` that reads any range at full length with the tool
   calls in between. The History view searches the same way, with filters for
   time and for messages or tool calls. See `nullbot/docs/HISTORY.md`.
+- **Context is sized per model.** Each request is measured against the
+  selected model's window (reported by the provider, learned from an error,
+  typical for the family, or set by you in Settings → Agent). From 60% full,
+  tool results the model has read are shortened to the tool, its arguments
+  and the start of the output; only past 85% does the model summarize older
+  messages. Skill text is never shortened. Any tool result that wouldn't fit
+  is cut to a preview with its size, so the agent reads it in pieces. A new
+  request carries earlier messages up to 30% of the window, with a pointer to
+  `history_search` for the rest. The chat shows how full the last request
+  was. See `nullbot/docs/CONTEXT.md`.
+- **Compact works.** It summarizes the conversation with the model and saves
+  the summary as a divider in the chat; later requests start from it, and the
+  messages above it stay.
+- **Skills from the `/` menu.** Picking a skill, or typing `/skill-name` at
+  the start of a message, sends the message with that skill selected.
 - **New look.** Clean panes, IBM Plex type, light and dark themes and five
   signal colors (Settings → Appearance). Ctrl+K opens commands; Ctrl+1–5
   switch views; Ctrl+. shows or hides the activity panel.

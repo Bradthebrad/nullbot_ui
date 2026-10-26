@@ -68,6 +68,11 @@ function Disclosure({id, label, preview, text, disclosures, initiallyOpen = fals
   );
 }
 
+/** The summary without the fixed sentence that introduces it to the model. */
+export function compactionSummary(text: string) {
+  return String(text || '').replace(/^Summary of earlier work in this conversation\.[^\n]*\n+/, '').trim();
+}
+
 function firstLine(text: string) {
   return shorten(String(text || '').split('\n').map(line => line.replace(/^[#*\s>-]+/, '').replace(/\*\*/g, '').trim()).find(Boolean) || '', 100);
 }
@@ -80,6 +85,16 @@ const MessageRow = memo(function MessageRow({message, rowKey, botName, disclosur
         <div className="row-gutter" />
         <div className="row-body">
           <Disclosure id={message.summaryKey || `${rowKey}:summary`} label={message.agent_id && message.agent_id !== 'main' ? `Thinking (${message.agent_id.split('/')[0]})` : 'Thinking'} preview={firstLine(message.content || '')} text={message.content || ''} disclosures={disclosures} />
+        </div>
+      </article>
+    );
+  }
+  if (role === 'compaction') {
+    return (
+      <article className="row row-quiet row-compaction" aria-label="Conversation compacted">
+        <div className="row-gutter" />
+        <div className="row-body">
+          <Disclosure id={`${rowKey}:compaction`} label="Conversation compacted. New requests start from this summary; the messages above are kept." preview="" text={compactionSummary(message.content || '')} disclosures={disclosures} />
         </div>
       </article>
     );

@@ -482,3 +482,7 @@ mark { padding: 0 1px; border-radius: 2px; background: var(--signal-soft); color
 .hist-tool-body { display: grid; gap: 6px; margin: 4px 0 6px 30px; }
 .hist-tool.is-failed .hist-tool-name { color: var(--bad); }
 @media (max-width: 860px) { .hist-tool { margin-left: 0; } }
+
+.input-suffix { display: flex; align-items: center; gap: 6px; }
+.input-suffix .input { width: 84px; }
+.step-guard { margin: 0 0 var(--s-2); font-size: var(--text-sm); }

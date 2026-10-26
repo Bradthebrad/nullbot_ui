@@ -58,6 +58,10 @@ export function CompletePath(arg1, arg2) {
   return window['go']['main']['App']['CompletePath'](arg1, arg2);
 }
 
+export function ContextWindow(arg1, arg2) {
+  return window['go']['main']['App']['ContextWindow'](arg1, arg2);
+}
+
 export function CreateDirectory(arg1) {
   return window['go']['main']['App']['CreateDirectory'](arg1);
 }
@@ -288,6 +292,10 @@ export function SetAppearance(arg1, arg2) {
 
 export function SetBotName(arg1) {
   return window['go']['main']['App']['SetBotName'](arg1);
+}
+
+export function SetContextWindow(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetContextWindow'](arg1, arg2, arg3);
 }
 
 export function SetMCPToolPolicy(arg1, arg2, arg3) {

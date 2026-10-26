@@ -4,7 +4,7 @@ import {useStore} from '../../lib/store';
 import {chatStore} from '../../state/chat';
 import {appStore, openSettings} from '../../state/app';
 import {api} from '../../lib/bindings';
-import {capabilityLabel, formatDuration, formatTime, permissionLabel, shorten} from '../../lib/format';
+import {capabilityLabel, formatDuration, formatTime, formatTokens, permissionLabel, shorten} from '../../lib/format';
 import {useNow} from '../../lib/useNow';
 import {CopyButton, Markdown} from '../../ui/Markdown';
 import {describeStep, hostOf, resultLinks, stepSource} from './describe';
@@ -204,6 +204,11 @@ function StepDetail({step}: {step: Step}) {
           </ul>
         </div>
       )}
+      {step.guard?.full_tokens ? (
+        <p className="notice step-guard">
+          The full result was about {formatTokens(step.guard.full_tokens)} tokens ({(step.guard.full_chars || 0).toLocaleString()} characters), more than the {formatTokens(step.guard.free_tokens || 0)} tokens of room left, so the model saw the first {(step.guard.shown_chars || 0).toLocaleString()} characters and a note asking it to read in smaller pieces.
+        </p>
+      ) : null}
       {step.result && (
         <div className="kv">
           <h4>Returned</h4>

@@ -45,6 +45,28 @@ export type ActivityRecord = {
   error?: string;
   duration_ms?: number;
   permission?: PermissionDecision;
+  /** Context measurements on model starts, compaction and cut tool results. */
+  context?: ContextMeasure;
+};
+
+/** How full a request's context is, and what compaction did. */
+export type ContextMeasure = {
+  context_tokens?: number;
+  context_window?: number;
+  context_ratio?: number;
+  tool_tokens?: number;
+  shorten_at?: number;
+  summarize_at?: number;
+  learned_window?: number;
+  before_tokens?: number;
+  after_tokens?: number;
+  shortened?: number;
+  summarized?: number;
+  /** Set on a tool result the guard cut to fit. */
+  full_tokens?: number;
+  full_chars?: number;
+  shown_chars?: number;
+  free_tokens?: number;
 };
 
 export type ChatMessage = {
@@ -113,7 +135,7 @@ export type MCPServerStatus = {
   stderr?: string;
 };
 
-export type ModelOption = {provider?: string; id: string; name?: string; description?: string; reasoning?: boolean; responses?: boolean};
+export type ModelOption = {provider?: string; id: string; name?: string; description?: string; reasoning?: boolean; responses?: boolean; context_window?: number; context_source?: string};
 export type ModelGroup = {provider: string; models: ModelOption[]; error?: string};
 
 export type AgentTask = {

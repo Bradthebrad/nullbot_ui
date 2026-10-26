@@ -1,7 +1,8 @@
 // Folds activity records into turns (one per chat submission) made of steps
 // (tool calls, thinking rounds, notes). Updates are copy-on-write so React can
 // skip unchanged turns and steps.
-import type {ActivityRecord, PermissionDecision} from '../../lib/types';
+import type {ActivityRecord, ContextMeasure, PermissionDecision} from '../../lib/types';
+import {formatTokens} from '../../lib/format';
 
 export type StepState = 'running' | 'done' | 'error' | 'blocked';
 export type StepKind = 'tool' | 'thinking' | 'note' | 'error';
@@ -31,6 +32,8 @@ export type Step = {
   endedAt?: string;
   durationMs?: number;
   text?: string;
+  /** For a tool result cut to fit: its full size and what was shown. */
+  guard?: ContextMeasure;
 };
 
 export type TurnState = 'running' | 'done' | 'error' | 'canceled';
@@ -43,6 +46,8 @@ export type Turn = {
   endedAt?: string;
   steps: Step[];
   writing: boolean;
+  /** The manager's latest measurement: how full its last request was. */
+  context?: {tokens: number; window: number; shortenAt?: number; summarizeAt?: number};
 };
 
 export type ActivityState = {turns: Turn[]; maxSeq: number};
@@ -258,6 +263,7 @@ export function applyActivity(state: ActivityState, records: ActivityRecord[]): 
         if (!step.args && record.args) step.args = record.args;
         if (record.permission) step.permission = record.permission;
         if (record.result_meta) step.resultMeta = record.result_meta;
+        if (record.context?.full_tokens) step.guard = record.context;
         if (status === 'tool complete') step.result = record.result ?? legacyResult(record.detail);
         else step.error = record.error || legacyResult(record.detail) || 'The tool reported an error.';
         break;
@@ -282,6 +288,11 @@ export function applyActivity(state: ActivityState, records: ActivityRecord[]): 
       case 'model start': {
         const seen = peek(record);
         if (seen && seen.steps.some(s => s.kind === 'thinking' && s.state === 'running' && s.agent === agent)) finishThinking(turnFor(record, false)!, agent, record.time);
+        const measure = record.context;
+        if (measure?.context_tokens && measure.context_window && !subagentName(agent)) {
+          const turn = turnFor(record, true)!;
+          turn.context = {tokens: measure.context_tokens, window: measure.context_window, shortenAt: measure.shorten_at, summarizeAt: measure.summarize_at};
+        }
         break;
       }
       case 'response delta': {
@@ -314,9 +325,10 @@ export function applyActivity(state: ActivityState, records: ActivityRecord[]): 
         addStep(turn, {key: `note:${seq}`, kind: 'note', state: status === 'instruction applied' ? 'done' : 'error', seq, agent, text: status === 'instruction applied' ? `Guidance delivered: ${record.detail || ''}` : `Guidance was not delivered: ${record.detail || ''}`, startedAt: record.time});
         break;
       }
+      case 'context shortened':
       case 'context compact complete': {
         const turn = turnFor(record, true)!;
-        addStep(turn, {key: `note:${seq}`, kind: 'note', state: 'done', seq, agent, text: 'Compacted older context to stay within the model limit.', startedAt: record.time});
+        addStep(turn, {key: `note:${seq}`, kind: 'note', state: 'done', seq, agent, agentName: subagentName(agent), text: contextNote(status, record.context), startedAt: record.time, endedAt: record.time});
         break;
       }
       case 'context compact error': {
@@ -331,6 +343,20 @@ export function applyActivity(state: ActivityState, records: ActivityRecord[]): 
 
   if (!changed && maxSeq === state.maxSeq) return state;
   return {turns, maxSeq};
+}
+
+/** What a compaction pass did, in a sentence. */
+export function contextNote(status: string, measure?: ContextMeasure): string {
+  const m = measure || {};
+  const sizes = m.before_tokens && m.after_tokens
+    ? `: ${formatTokens(m.before_tokens)} → ${formatTokens(m.after_tokens)}${m.context_window ? ` of ${formatTokens(m.context_window)}` : ''} tokens`
+    : '';
+  if (status === 'context shortened') {
+    const n = m.shortened || 0;
+    return `Shortened ${n ? `${n} earlier tool result${n === 1 ? '' : 's'}` : 'earlier tool results'} to make room${sizes}.`;
+  }
+  const n = m.summarized || 0;
+  return `Summarized ${n ? `${n} earlier message${n === 1 ? '' : 's'}` : 'earlier messages'} to make room${sizes}.`;
 }
 
 export function stepDuration(step: Step, now = Date.now()): number | undefined {

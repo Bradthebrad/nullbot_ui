@@ -157,3 +157,15 @@ export function firstLine(text?: string, limit = 120): string {
   const line = String(text || '').split('\n').map(part => part.replace(/^[#*\s>-]+/, '').replace(/\*\*/g, '').trim()).find(Boolean) || '';
   return shorten(line, limit);
 }
+
+/** Token counts as people read them: 950, 12.4k, 200k, 1.05M. */
+export function formatTokens(n: number): string {
+  if (!Number.isFinite(n)) return '';
+  const abs = Math.abs(n);
+  if (abs < 1000) return String(Math.round(n));
+  if (abs < 1_000_000) {
+    const k = n / 1000;
+    return `${abs < 10_000 ? k.toFixed(1).replace(/\.0$/, '') : Math.round(k)}k`;
+  }
+  return `${(n / 1_000_000).toFixed(2).replace(/\.?0+$/, '')}M`;
+}

@@ -264,8 +264,8 @@ export async function compactConversation(focus = '') {
   try {
     toast('Compacting the conversation…');
     const reply = await api.compact(focus);
-    chatStore.set({messages: reconcileChatHistory([], reply.history || [])});
-    toast('Conversation compacted.', 'success');
+    chatStore.set({messages: reconcileChatHistory(chatStore.get().messages, reply.history || [])});
+    toast(reply.message || 'Conversation compacted.', 'success');
   } catch (error) {
     toastError(error);
   }

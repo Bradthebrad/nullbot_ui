@@ -1,7 +1,7 @@
 // Turns a tool step into a sentence a person can read at a glance:
 // "Searching the web for “acme q3”" → "Searched the web for “acme q3”" (8 results).
 import type {Step} from './model';
-import {basename, formatBytes, shorten} from '../../lib/format';
+import {basename, formatBytes, formatTokens, shorten} from '../../lib/format';
 import {classifyHref, hostOf} from '../../lib/links';
 
 export type StepCategory = 'search' | 'web' | 'browser' | 'email' | 'drive' | 'message' | 'document' | 'image' | 'file' | 'edit' | 'delete' | 'command' | 'agent' | 'skill' | 'nullbot' | 'tool';
@@ -272,6 +272,7 @@ export function stepDetail(step: Step): string | undefined {
   if (step.state === 'blocked') return step.permission?.reason || step.error;
   if (step.state === 'error') return firstLine(step.error);
   if (step.state === 'running') return undefined;
+  if (step.guard?.full_tokens) return `Cut to fit: about ${formatTokens(step.guard.full_tokens)} tokens, too large for the room left`;
   const meta = step.resultMeta || {};
   const items = typeof meta.items === 'number' ? meta.items : undefined;
   const links = Array.isArray(meta.links) ? meta.links.length : 0;

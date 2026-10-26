@@ -411,33 +411,52 @@ func (a *App) Analyze(focus string) (nullbot.Reply, error) {
 	return a.startBackgroundSubmit(cmd, "Workspace analysis")
 }
 
+// CompactConversation summarizes the conversation with the model and adds
+// the summary to the history. Later requests start from it; the messages
+// before it stay in the chat and on disk.
 func (a *App) CompactConversation(focus string) (nullbot.Reply, error) {
-	before := a.bot.State().History
-	cmd := "/compact"
-	if strings.TrimSpace(focus) != "" {
-		cmd += " " + strings.TrimSpace(focus)
+	if a.initErr != nil {
+		return nullbot.Reply{}, a.initErr
 	}
-	reply, err := a.submit(cmd)
+	if a.bot == nil {
+		return nullbot.Reply{}, fmt.Errorf("chat service is not initialized")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	result, err := a.bot.CompactConversation(ctx, strings.TrimSpace(focus))
 	if err != nil {
-		return reply, err
-	}
-	summary := strings.TrimSpace(reply.Message)
-	if summary == "" {
-		summary = "Conversation compacted."
-	}
-	if !a.bot.TryReplaceHistoryIfUnchanged(before, []nullbot.Message{{
-		Role:    "assistant",
-		Content: "Conversation compacted.\n\n" + summary,
-		Time:    time.Now().UTC(),
-	}}) {
-		return nullbot.Reply{}, fmt.Errorf("conversation changed or submissions are active; compact again when idle")
+		return nullbot.Reply{}, err
 	}
 	updated := a.bot.State()
-	updated.Data["history_replace"] = true
-	updated.Message = "Conversation compacted."
+	if updated.Data == nil {
+		updated.Data = map[string]any{}
+	}
+	updated.Data["compaction"] = result.Report
+	updated.Message = fmt.Sprintf("Compacted %d messages, from about %d to %d tokens.", result.Report.Summarized, result.Report.BeforeTokens, result.Report.AfterTokens)
 	updated.OpenPanel = "chat"
 	a.emit("reply", updated)
 	return updated, nil
+}
+
+// SetContextWindow overrides the context size used for a model. Zero
+// removes the override.
+func (a *App) SetContextWindow(provider, model string, tokens int) (UIState, error) {
+	if a.bot == nil {
+		return UIState{}, fmt.Errorf("chat service is not initialized")
+	}
+	if err := a.bot.SetContextWindowOverride(provider, model, tokens); err != nil {
+		return UIState{}, err
+	}
+	return a.State()
+}
+
+// ContextWindow reports the context size a model gets without your
+// override, and where that size came from.
+func (a *App) ContextWindow(provider, model string) nullbot.ContextWindow {
+	if a.bot == nil {
+		return nullbot.ContextWindow{}
+	}
+	return a.bot.BaseContextWindowFor(provider, model)
 }
 
 func (a *App) submit(input string) (nullbot.Reply, error) {

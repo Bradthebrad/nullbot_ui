@@ -49,7 +49,7 @@ function toQuery(filters: Filters): HistoryQuery | null {
   if (filters.text.trim()) query.text = filters.text.trim();
   const since = sinceFor(filters.period);
   if (since) query.since = since;
-  if (filters.kind === 'messages') query.roles = ['user', 'assistant', 'reasoning', 'commentary'];
+  if (filters.kind === 'messages') query.roles = ['user', 'assistant', 'reasoning', 'commentary', 'compaction'];
   if (filters.kind === 'tools') query.roles = ['tool'];
   return query.text || query.since || query.roles ? query : null;
 }
@@ -228,12 +228,12 @@ function EntryRow({entry, hit, terms, botName}: {entry: HistoryEntry; hit: boole
   if (!message || !String(message.content || '').trim()) return null;
   const role = message.role || 'assistant';
   const hitClass = hit ? ' is-hit' : '';
-  if (role === 'reasoning' || role === 'commentary') {
+  if (role === 'reasoning' || role === 'commentary' || role === 'compaction') {
     return (
       <article className={`row row-quiet${hitClass}`}>
         <div className="row-gutter" />
         <div className="row-body commentary prose-sm">
-          <span className="faint">{role === 'reasoning' ? 'Thinking: ' : ''}</span>
+          <span className="faint">{role === 'reasoning' ? 'Thinking: ' : role === 'compaction' ? 'Compacted here. Summary: ' : ''}</span>
           {hit ? <Highlight text={String(message.content || '')} terms={terms} /> : shorten(message.content, 400)}
         </div>
       </article>

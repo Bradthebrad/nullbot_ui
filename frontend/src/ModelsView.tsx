@@ -2,7 +2,16 @@
 // can execute it with a minimal hook harness.
 import {useEffect, useRef, useState} from 'react';
 import {ModelCatalog, Models, SetModel} from '../wailsjs/go/main/App';
+import {formatTokens} from './lib/format';
 import './projects-models.css';
+
+const windowSource: Record<string, string> = {
+  override: 'your setting',
+  provider: 'reported by the provider',
+  learned: 'learned from a provider error',
+  'built-in': 'typical for this model family',
+  default: 'size unknown, so the default',
+};
 
 type Props = {ui: any; refreshState: () => void};
 type Target = 'manager' | 'subagent' | 'both';
@@ -89,6 +98,7 @@ export default function ModelsView({ui, refreshState}: Props) {
               <strong>{model.name || model.id}</strong>
               {model.name && model.name !== model.id && <span className="mono faint">{model.id}</span>}
               {model.reasoning && <span className="tag">Reasoning</span>}
+              {model.context_window ? <span className="faint num model-window" title={`Context window: ${model.context_window.toLocaleString()} tokens, ${windowSource[model.context_source] || 'as configured'}. Change it in Settings → Agent.`}>{formatTokens(model.context_window)} context</span> : null}
               {manager && <span className="tag warn">Manager</span>}
               {subagent && <span className="tag warn">Subagents</span>}
             </div>

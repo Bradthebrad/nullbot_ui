@@ -12,6 +12,7 @@ import BusySendDialog from '../../BusySendDialog';
 import {SkillComposer, useSkillContext} from '../../SkillComposer';
 import {removeQueuedChat, type ChatMode} from '../../chatSubmission';
 import {MenuButton} from '../../ui/Menu';
+import {ContextMeter} from './ContextMeter';
 import {toast, toastError} from '../../ui/toast';
 import {OnFileDrop, OnFileDropOff} from '../../../wailsjs/runtime/runtime';
 import type {SkillFile} from '../../lib/types';
@@ -339,6 +340,7 @@ export function Composer({active}: {active: boolean}) {
           }}>/</button>
           {blocked && <span className="composer-block faint">{blocked}</span>}
           <span className="composer-spacer" />
+          <ContextMeter />
           <span className="composer-hint faint"><CornerDownLeft size={12} /> send, Shift <CornerDownLeft size={12} /> new line</span>
           <button className="btn btn-ghost" disabled={!canSend} title="Ask without interrupting the main conversation" onClick={() => void send('also')}>
             <Layers size={15} />Ask on the side
@@ -377,7 +379,7 @@ const commandHelp: Record<string, string> = {
   '/help': 'Show commands and shortcuts',
   '/plan': 'Create a plan for a goal',
   '/analyze': 'Analyze the conversation or a focus',
-  '/compact': 'Summarize older messages to save context',
+  '/compact': 'Summarize the conversation; later requests start from the summary',
   '/also': 'Ask a side question',
   '/pause': 'Stop the current request',
   '/clear': 'Clear the visible conversation',

@@ -89,10 +89,12 @@ export function AgentSettings() {
       </header>
 
       <Group title="Manager model" note="Pick models from the Models page; tune them here.">
-        <ModelFields value={val('model') || {}} groups={groups} onChange={(field, value) => set(`model.${field}`, value)} />
+        <ModelFields value={val('model') || {}} groups={groups} onChange={(field, value) => set(`model.${field}`, value)}
+          overrides={val('compaction.context_windows') || {}} onOverride={windows => set('compaction.context_windows', windows)} />
       </Group>
       <Group title="Subagent model" note="Used for work the manager hands out. Leave the provider empty to use the manager’s model.">
-        <ModelFields value={val('subagent_model') || {}} groups={groups} allowEmpty onChange={(field, value) => set(`subagent_model.${field}`, value)} />
+        <ModelFields value={val('subagent_model') || {}} groups={groups} allowEmpty onChange={(field, value) => set(`subagent_model.${field}`, value)}
+          overrides={val('compaction.context_windows') || {}} onOverride={windows => set('compaction.context_windows', windows)} />
       </Group>
 
       <Group title="Limits">
@@ -103,14 +105,17 @@ export function AgentSettings() {
         <Check label="Use the OpenAI Responses API when the model supports it" checked={!!val('agent.use_responses')} onChange={v => set('agent.use_responses', v)} />
       </Group>
 
-      <Group title="Long conversations" note="Older messages are summarized so the model keeps room for new work.">
-        <Check label="Summarize older messages automatically" checked={!!val('compaction.enabled')} onChange={v => set('compaction.enabled', v)} />
+      <Group title="Context" note="NullBot measures every request against the model’s context window and makes room in two steps, so long work doesn’t overflow it.">
         <div className="form-grid">
-          <NumberField label="Context size (tokens)" value={val('compaction.approx_token_limit')} onChange={v => set('compaction.approx_token_limit', v)} />
-          <NumberField label="Summarize when this full (%)" value={Math.round((val('compaction.threshold_ratio') || 0.75) * 100)} onChange={v => set('compaction.threshold_ratio', Math.min(100, Math.max(10, v)) / 100)} />
-          <NumberField label="Or after this many messages" value={val('compaction.message_count_limit')} onChange={v => set('compaction.message_count_limit', v)} />
-          <NumberField label="Always keep the last" help="Messages kept word for word." value={val('compaction.keep_last_messages')} onChange={v => set('compaction.keep_last_messages', v)} />
-          <NumberField label="Tool output kept (characters)" value={val('compaction.tool_result_char_limit')} onChange={v => set('compaction.tool_result_char_limit', v)} />
+          <PercentField label="Shorten tool results at" help="Results the model has already read become the tool, its arguments and the start of the output. Skills are never shortened." value={val('compaction.shorten_ratio')} fallback={0.6} onChange={v => set('compaction.shorten_ratio', v)} />
+          <PercentField label="Summarize at" help="If shortening isn’t enough, the model summarizes older messages. Recent ones stay word for word." value={val('compaction.summarize_ratio')} fallback={0.85} onChange={v => set('compaction.summarize_ratio', v)} />
+        </div>
+        <Check label="Summarize automatically" checked={!!val('compaction.enabled')} onChange={v => set('compaction.enabled', v)} />
+        <div className="form-grid">
+          <PercentField label="Earlier messages in a new request" help="How much of the window the conversation so far may take. Older messages stay readable through history search." value={val('compaction.history_ratio')} fallback={0.3} max={60} onChange={v => set('compaction.history_ratio', v)} />
+          <NumberField label="Characters kept from a shortened result" value={val('compaction.tool_digest_chars')} onChange={v => set('compaction.tool_digest_chars', v)} />
+          <NumberField label="Most of an oversized result shown" help="Characters. A tool result that wouldn’t fit is cut to this, with a note giving its full size." value={val('compaction.tool_result_char_limit')} onChange={v => set('compaction.tool_result_char_limit', v)} />
+          <NumberField label="Window for an unknown model" help="Tokens. Used when a model’s size isn’t reported or known." value={val('compaction.approx_token_limit')} onChange={v => set('compaction.approx_token_limit', v)} />
         </div>
         <TextField label="What summaries should keep" placeholder="Decisions, open questions, file paths" value={val('compaction.default_focus') || ''} onChange={v => set('compaction.default_focus', v)} />
       </Group>
@@ -164,6 +169,64 @@ function NumberField({label, value, onChange, help}: {label: string; value: numb
   );
 }
 
+function PercentField({label, value, fallback, onChange, help, max = 95}: {label: string; value: number | undefined; fallback: number; onChange: (value: number) => void; help?: string; max?: number}) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <span className="input-suffix">
+        <input className="input num" type="number" min={10} max={max} value={Math.round((value || fallback) * 100)} onChange={event => onChange(Math.min(max, Math.max(5, Number(event.target.value || 0))) / 100)} />
+        <span className="faint">% full</span>
+      </span>
+      {help && <small>{help}</small>}
+    </label>
+  );
+}
+
+const windowSource: Record<string, string> = {
+  override: 'Your setting',
+  provider: 'Reported by the provider',
+  learned: 'Learned from a provider error',
+  'built-in': 'Typical for this model family',
+  default: 'Unknown model, so the default below',
+};
+
+/** The context window a model gets without an override, and its source. */
+function useBaseWindow(provider?: string, model?: string) {
+  const [base, setBase] = useState<{tokens: number; source: string} | null>(null);
+  useEffect(() => {
+    setBase(null);
+    if (!provider || !model) return;
+    let live = true;
+    api.contextWindow(provider, model).then(w => {if (live && w?.tokens) setBase(w);}).catch(() => undefined);
+    return () => {live = false;};
+  }, [provider, model]);
+  return base;
+}
+
+function ContextWindowField({provider, model, overrides, onOverride}: {provider?: string; model?: string; overrides: Record<string, number>; onOverride: (windows: Record<string, number>) => void}) {
+  const key = provider && model ? `${provider.toLowerCase()}/${model}` : '';
+  const base = useBaseWindow(provider, model);
+  const override = key ? overrides[key] : undefined;
+  const set = (tokens: number) => {
+    const next = {...overrides};
+    if (tokens >= 1024) next[key] = tokens;
+    else delete next[key];
+    onOverride(next);
+  };
+  const sourceText = base ? windowSource[base.source] || '' : '';
+  return (
+    <label className="field">
+      <span>Context window (tokens)</span>
+      <input className="input num" type="number" min={0} disabled={!key} placeholder={base ? base.tokens.toLocaleString() : ''} value={override || ''} onChange={event => set(Number(event.target.value || 0))} />
+      <small>
+        {!base ? 'Looking up the size…'
+          : override ? `Your setting. Clear it to use ${base.tokens.toLocaleString()} (${sourceText.toLowerCase()}).`
+            : `${sourceText}. Enter a number to override it.`}
+      </small>
+    </label>
+  );
+}
+
 function TextField({label, value, onChange, placeholder}: {label: string; value: string; onChange: (value: string) => void; placeholder?: string}) {
   return (
     <label className="field">
@@ -177,7 +240,7 @@ function Check({label, checked, onChange}: {label: string; checked: boolean; onC
   return <label className="check"><input type="checkbox" checked={checked} onChange={event => onChange(event.target.checked)} />{label}</label>;
 }
 
-function ModelFields({value, groups, onChange, allowEmpty}: {value: any; groups: ModelGroup[]; onChange: (field: string, value: unknown) => void; allowEmpty?: boolean}) {
+function ModelFields({value, groups, onChange, allowEmpty, overrides, onOverride}: {value: any; groups: ModelGroup[]; onChange: (field: string, value: unknown) => void; allowEmpty?: boolean; overrides: Record<string, number>; onOverride: (windows: Record<string, number>) => void}) {
   const providers = [...new Set([...(value.provider ? [value.provider] : []), ...groups.map(g => g.provider)])];
   const models = groups.find(g => g.provider === value.provider)?.models || [];
   const ids = [...new Set([...(value.model ? [value.model] : []), ...models.map(m => m.id)])];
@@ -214,6 +277,7 @@ function ModelFields({value, groups, onChange, allowEmpty}: {value: any; groups:
         <span>Reply length limit (tokens)</span>
         <input className="input num" type="number" min={0} placeholder="Provider default" value={value.max_tokens || ''} disabled={!value.provider} onChange={event => onChange('max_tokens', Number(event.target.value || 0))} />
       </label>
+      {value.provider && value.model && <ContextWindowField provider={value.provider} model={value.model} overrides={overrides} onOverride={onOverride} />}
     </div>
   );
 }
