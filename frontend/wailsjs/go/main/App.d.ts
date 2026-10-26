@@ -45,6 +45,8 @@ export function DeletePlan(arg1:string):Promise<app.Reply>;
 
 export function DeleteScheduledTask(arg1:string):Promise<Array<app.ScheduledTask>>;
 
+export function DeleteServiceAccount(arg1:string):Promise<void>;
+
 export function DiscoverMCPTools(arg1:string):Promise<Array<main.MCPToolInfo>>;
 
 export function ExecutePlan(arg1:string):Promise<app.Reply>;
@@ -103,6 +105,8 @@ export function SaveProjects(arg1:Array<app.Project>,arg2:string):Promise<main.P
 
 export function SavePrompts(arg1:app.PromptConfig):Promise<main.UIState>;
 
+export function SaveServiceAccount(arg1:app.ServiceAccountInput):Promise<void>;
+
 export function SaveSkill(arg1:main.SkillSaveRequest):Promise<main.SkillFile>;
 
 export function SaveUsageReport(arg1:main.UsageFilter):Promise<main.UsageReport>;
@@ -112,6 +116,10 @@ export function ScheduledTasks():Promise<Array<app.ScheduledTask>>;
 export function SearchSessions(arg1:string):Promise<Array<main.SessionSummary>>;
 
 export function SendAlso(arg1:string):Promise<app.Reply>;
+
+export function ServiceAccountCatalog():Promise<Array<app.ServiceDefinition>>;
+
+export function ServiceAccountStatus():Promise<app.ServiceAccountState>;
 
 export function Sessions(arg1:number):Promise<Array<main.SessionSummary>>;
 

@@ -86,6 +86,10 @@ export function DeleteScheduledTask(arg1) {
   return window['go']['main']['App']['DeleteScheduledTask'](arg1);
 }
 
+export function DeleteServiceAccount(arg1) {
+  return window['go']['main']['App']['DeleteServiceAccount'](arg1);
+}
+
 export function DiscoverMCPTools(arg1) {
   return window['go']['main']['App']['DiscoverMCPTools'](arg1);
 }
@@ -202,6 +206,10 @@ export function SavePrompts(arg1) {
   return window['go']['main']['App']['SavePrompts'](arg1);
 }
 
+export function SaveServiceAccount(arg1) {
+  return window['go']['main']['App']['SaveServiceAccount'](arg1);
+}
+
 export function SaveSkill(arg1) {
   return window['go']['main']['App']['SaveSkill'](arg1);
 }
@@ -220,6 +228,14 @@ export function SearchSessions(arg1) {
 
 export function SendAlso(arg1) {
   return window['go']['main']['App']['SendAlso'](arg1);
+}
+
+export function ServiceAccountCatalog() {
+  return window['go']['main']['App']['ServiceAccountCatalog']();
+}
+
+export function ServiceAccountStatus() {
+  return window['go']['main']['App']['ServiceAccountStatus']();
 }
 
 export function Sessions(arg1) {

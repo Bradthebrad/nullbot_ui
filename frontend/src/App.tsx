@@ -9,6 +9,7 @@ import {useChatLayout, ResizeHandle} from './ChatLayout';
 import './ux.css';
 import ProjectsView, {Project, ProjectsState} from './ProjectsView';
 import ModelsView from './ModelsView';
+import ServiceAccountsPanel from './ServiceAccountsPanel';
 import {useSkillContext, SkillComposer, SkillContextNotice} from './SkillComposer';
 import './integration.css';
 
@@ -1432,6 +1433,7 @@ function AccountsPanel({refreshState, setStatus}: {refreshState: () => void; set
         ))}
       </div>
       {state?.keys_path && <div className="account-path">Key file: {state.keys_path}</div>}
+      <ServiceAccountsPanel />
     </div>
   );
 }

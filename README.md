@@ -58,6 +58,21 @@ Build the desktop app:
 wails build
 ```
 
+## Local Service Accounts
+
+The shared Accounts panel in Settings and Models stores configuration locally through the NullBot Windows current-user DPAPI vault. Status is metadata only and always unverified; credentials are never read back into the UI. Replacing an account replaces **all** fields, with blank required secrets rejected and blank/omitted optional secrets removed. Write/send permission defaults off even on replacement; sending also requires explicit per-call confirmation.
+
+New provider setup:
+
+- **Gmail (IMAP/SMTP)** (`gmail_imap`): required nonsecret `email` and secret `app_password`, using fixed TLS Gmail endpoints. Use a Google app password, not your normal password; Google/Workspace policy may restrict availability. The existing **Gmail** REST OAuth tile remains unchanged.
+- **Discord (bot)**: required secret `bot_token`. Bot channel read/send subject to permissions and message-content policy; no selfbot, user token or personal-account login.
+- **Telegram (bot)**: required secret `bot_token` in numeric bot-ID, colon, URL-safe token format. Reads show pending updates, **not history**, without advancing an offset or acknowledging updates. Existing webhooks may block polling. Sends use numeric chat IDs, not usernames; no personal-account login.
+- **Signal (unofficial bridge)**: required nonsecret `bridge_url` and E.164 `number`, optional secret `api_token`. Outbound only through a separately installed/configured `signal-cli-rest-api` bridge. Only `http://127.0.0.1:<port>` or `http://[::1]:<port>` (1–65535, no trailing slash) is accepted; no URL credentials, path, query, fragment or remote host. Secure the local HTTP bridge and bind it only to loopback. NullBot does not install the bridge, register a number, link a device or read an inbox.
+
+Saving, deleting and refreshing status do not contact providers, install/enable MCPs, or send tests. Vault credentials are injected only into the correct enabled, hash-pinned official stdio connector. Reserved provider environment prefixes cannot override that boundary. Marketplace release/trust state is unchanged by this UI support; a compatible connector must be separately available and explicitly installed/enabled.
+
+The frontend catalog fixture is checked against the backend catalog by `service_accounts_test.go` and against UI definitions by `frontend/tests/service-accounts.test.mjs`. Validate both together with the updated NullBot source (the local Go workspace), not an older pinned module whose catalog lacks these providers. No dependency version or release update is implied.
+
 ## Privacy Notes
 
 No API keys, account tokens, Codex auth files, NullBot config files, session data, or local workspace content should be committed here. Runtime credentials and user data are loaded from the user's NullBot data directory and local environment at run time.
