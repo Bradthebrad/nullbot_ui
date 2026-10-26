@@ -36,6 +36,14 @@ func (a *App) SubmitChatRequest(request ChatRequest) (nullbot.Reply, error) {
 	if mode != "send" && mode != "also" && mode != "queue" && mode != "steer" {
 		return nullbot.Reply{}, fmt.Errorf("unknown submission mode %q", request.Mode)
 	}
+	// A leading /skill-name selects that skill for the rest of the message.
+	if rest, path, ok := nullbot.SkillInvocation(a.bot.Config(), request.Text); ok {
+		if rest == "" {
+			return nullbot.Reply{}, fmt.Errorf("add a message for the skill to work on")
+		}
+		request.Text = rest
+		request.SkillPaths = append(append([]string(nil), request.SkillPaths...), path)
+	}
 	ctx, err := nullbot.WithSelectedSkills(context.Background(), a.bot.Config(), request.SkillPaths)
 	if err != nil {
 		return nullbot.Reply{}, err

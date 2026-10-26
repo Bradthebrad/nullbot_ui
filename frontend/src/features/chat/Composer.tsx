@@ -50,6 +50,9 @@ export function Composer({active}: {active: boolean}) {
   const recallDraft = useRef('');
   const blocked = attachmentSendBlock(attachments);
   const skillContext = useSkillContext(input, skills, suggestSkills, !input.trim().startsWith('/'));
+  // Skills chosen from the / menu (or typed as /skill-name at the start).
+  // They apply to the next message whether or not word suggestions are on.
+  const [picked, setPicked] = useState<SkillFile[]>([]);
 
   useEffect(() => {
     if (!active) return;
@@ -101,6 +104,19 @@ export function Composer({active}: {active: boolean}) {
 
   function applySuggestion(item: Suggestion) {
     if (!token) return;
+    if (item.kind === 'skill') {
+      // A skill becomes a selection, not text: "/name" at the start of a
+      // message would otherwise be sent as an unknown command.
+      const skill = skills.find(s => s.path === item.path);
+      if (skill) setPicked(current => (current.some(s => s.path === skill.path) ? current : [...current, skill]));
+      const next = `${input.slice(0, token.start)}${input.slice(caret).replace(/^\s+/, '')}`;
+      update(next);
+      window.setTimeout(() => {
+        textarea.current?.setSelectionRange(token.start, token.start);
+        setCaret(token.start);
+      }, 0);
+      return;
+    }
     const next = `${input.slice(0, token.start)}${item.value} ${input.slice(caret)}`;
     update(next);
     const position = token.start + item.value.length + 1;
@@ -134,27 +150,39 @@ export function Composer({active}: {active: boolean}) {
   }
 
   async function send(mode?: ChatMode) {
-    const text = input.trim();
+    let text = input.trim();
+    // "/skill-name do this" at the start means: do this, with that skill.
+    let leading: SkillFile | undefined;
+    const lead = /^\/(\S+)(?:\s+|$)/.exec(text);
+    if (lead && !commands.includes(`/${lead[1]}`)) {
+      leading = skills.find(s => s.name === lead[1]);
+      if (leading) text = text.slice(lead[0].length).trim();
+    }
     const staged = queue.snapshot();
     const block = attachmentSendBlock(staged);
     if (block) {
       toast(block, 'error');
       return;
     }
-    if (!text && !staged.length) return;
+    if (!text && !staged.length) {
+      if (leading || picked.length) toast('Add a message for the skill to work on.');
+      return;
+    }
     if (!mode && busy) {
       setChoice(true);
       return;
     }
     setChoice(false);
     const sentRevision = revision.current;
-    const sendSkills = !text.startsWith('/') ? [...skillContext.paths] : [];
+    const command = text.startsWith('/');
+    const sendSkills = command ? [] : [...new Set([...picked.map(s => s.path), ...(leading ? [leading.path] : []), ...skillContext.paths])];
     try {
       const accepted = await sendChat({mode: mode || 'normal', text, attachments: [...staged], skills: sendSkills, targetJob: submissions.primary_id});
       if (!accepted) return;
       remember(text);
       if (revision.current === sentRevision) setInput('');
       queue.removeMany(staged.map(item => item.id));
+      if (!command) setPicked([]);
       if (sendSkills.length) toast(`Included ${sendSkills.length === 1 ? 'a skill' : `${sendSkills.length} skills`} as context.`);
     } catch (error) {
       toastError(error);
@@ -238,9 +266,15 @@ export function Composer({active}: {active: boolean}) {
           />
         </div>
       )}
-      {skillContext.matches.length > 0 && (
+      {(picked.length > 0 || skillContext.matches.length > 0) && (
         <div className="composer-skills" aria-live="polite">
-          {skillContext.matches.map(skill => (
+          {picked.map(skill => (
+            <span className="tag warn" key={skill.path}>
+              Using skill {skill.name}
+              <button className="tag-x" aria-label={`Don’t use ${skill.name}`} onClick={() => setPicked(current => current.filter(s => s.path !== skill.path))}><X size={11} /></button>
+            </span>
+          ))}
+          {skillContext.matches.filter(skill => !picked.some(p => p.path === skill.path)).map(skill => (
             <span className="tag" key={skill.path}>
               Using skill {skill.name}
               <button className="tag-x" aria-label={`Don’t use ${skill.name} for this message`} onClick={() => skillContext.dismiss(skill.path)}><X size={11} /></button>

@@ -114,4 +114,46 @@ describe('Composer', () => {
     await act(async () => {});
     expect(bridge.callsTo('SubmitChatRequest')).toHaveLength(0);
   });
+
+  describe('skills from the / menu', () => {
+    const skill = {name: 'release-notes', path: 'C:\\skills\\release-notes\\SKILL.md', description: 'Draft release notes'};
+    beforeEach(() => {
+      bridge.set('Skills', () => [skill]);
+      bridge.set('SubmitChatRequest', () => ({data: {background: true}}));
+    });
+
+    it('picking a skill selects it instead of inserting /name, and sends it with the message', async () => {
+      const {box, send} = setup('/rel');
+      const option = await screen.findByRole('option', {name: /release-notes/});
+      fireEvent.mouseDown(option);
+      expect(box.value).toBe('');
+      expect(screen.getByText(/Using skill release-notes/)).toBeTruthy();
+      fireEvent.change(box, {target: {value: 'draft v2'}});
+      fireEvent.click(send());
+      await waitFor(() => expect(bridge.callsTo('SubmitChatRequest')).toHaveLength(1));
+      const request = bridge.callsTo('SubmitChatRequest')[0][0] as any;
+      expect(request.text).toBe('draft v2');
+      expect(request.skill_paths).toEqual([skill.path]);
+      await waitFor(() => expect(screen.queryByText(/Using skill release-notes/)).toBeNull());
+    });
+
+    it('a typed leading /skill-name becomes the skill plus the rest of the message', async () => {
+      const {send} = setup('/release-notes draft v2');
+      await waitFor(() => expect(bridge.callsTo('Skills').length).toBeGreaterThan(0));
+      await act(async () => undefined);
+      fireEvent.click(send());
+      await waitFor(() => expect(bridge.callsTo('SubmitChatRequest')).toHaveLength(1));
+      const request = bridge.callsTo('SubmitChatRequest')[0][0] as any;
+      expect(request.text).toBe('draft v2');
+      expect(request.skill_paths).toEqual([skill.path]);
+    });
+
+    it('does not send a skill with no message', async () => {
+      const {send} = setup('/release-notes');
+      await screen.findByRole('option', {name: /release-notes/});
+      fireEvent.click(send());
+      await act(async () => undefined);
+      expect(bridge.callsTo('SubmitChatRequest')).toHaveLength(0);
+    });
+  });
 });
