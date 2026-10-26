@@ -57,13 +57,23 @@ export function ListFiles(arg1:string):Promise<main.FileBrowser>;
 
 export function LoadSession(arg1:string,arg2:number):Promise<app.Reply>;
 
+export function MCPServer(arg1:string):Promise<any>;
+
+export function MCPServers():Promise<Array<any>>;
+
 export function MCPState():Promise<Record<string, any>>;
 
 export function Marketplace(arg1:boolean):Promise<main.MarketState>;
 
+export function ModelCatalog(arg1:boolean):Promise<Array<app.ModelGroup>>;
+
 export function Models():Promise<Array<app.ModelGroup>>;
 
 export function OpenCodexLogin():Promise<main.AccountState>;
+
+export function OpenExternal(arg1:string):Promise<void>;
+
+export function OpenPath(arg1:string):Promise<void>;
 
 export function Pause():Promise<app.Reply>;
 
@@ -87,7 +97,11 @@ export function RemoveQueuedChat(arg1:string):Promise<app.SubmissionSnapshot>;
 
 export function RenamePath(arg1:main.FileRenameRequest):Promise<main.FileBrowser>;
 
+export function RestartMCPServer(arg1:string):Promise<any>;
+
 export function Resume():Promise<app.Reply>;
+
+export function RevealPath(arg1:string):Promise<void>;
 
 export function RunScheduledTaskNow(arg1:string):Promise<Array<app.ScheduledTask>>;
 
@@ -125,7 +139,11 @@ export function Sessions(arg1:number):Promise<Array<main.SessionSummary>>;
 
 export function SetBotName(arg1:string):Promise<main.UIState>;
 
+export function SetMCPToolPolicy(arg1:string,arg2:string,arg3:string):Promise<any>;
+
 export function SetModel(arg1:string,arg2:string,arg3:string):Promise<main.UIState>;
+
+export function SetPrimaryProject(arg1:string):Promise<main.ProjectsState>;
 
 export function SetTheme(arg1:string):Promise<main.UIState>;
 
@@ -133,7 +151,11 @@ export function SetWorkingDirectory(arg1:string):Promise<main.FileBrowser>;
 
 export function Skills():Promise<Array<main.SkillFile>>;
 
+export function StartMCPServer(arg1:string):Promise<any>;
+
 export function State():Promise<main.UIState>;
+
+export function StopMCPServer(arg1:string):Promise<Array<any>>;
 
 export function Submit(arg1:string):Promise<app.Reply>;
 
@@ -148,3 +170,5 @@ export function Thoughts():Promise<Array<app.ThoughtSnapshot>>;
 export function ToggleMCPServer(arg1:string,arg2:string):Promise<main.UIState>;
 
 export function Usage():Promise<app.UsageSnapshot>;
+
+export function UsageSummary():Promise<app.UsageSnapshot>;

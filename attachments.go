@@ -130,7 +130,7 @@ func checkAttachmentSource(config nullbot.Config, source string) error {
 		}
 		rel, err := filepath.Rel(root, source)
 		inside := err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
-		if inside && p.Permission != "read-only" && p.Permission != "read-write" && p.Permission != "full" {
+		if inside && !nullbot.ValidPermission(p.Permission) {
 			return fmt.Errorf("invalid or denied project permission for %s", p.Name)
 		}
 	}

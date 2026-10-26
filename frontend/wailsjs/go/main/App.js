@@ -110,6 +110,14 @@ export function LoadSession(arg1, arg2) {
   return window['go']['main']['App']['LoadSession'](arg1, arg2);
 }
 
+export function MCPServer(arg1) {
+  return window['go']['main']['App']['MCPServer'](arg1);
+}
+
+export function MCPServers() {
+  return window['go']['main']['App']['MCPServers']();
+}
+
 export function MCPState() {
   return window['go']['main']['App']['MCPState']();
 }
@@ -118,12 +126,24 @@ export function Marketplace(arg1) {
   return window['go']['main']['App']['Marketplace'](arg1);
 }
 
+export function ModelCatalog(arg1) {
+  return window['go']['main']['App']['ModelCatalog'](arg1);
+}
+
 export function Models() {
   return window['go']['main']['App']['Models']();
 }
 
 export function OpenCodexLogin() {
   return window['go']['main']['App']['OpenCodexLogin']();
+}
+
+export function OpenExternal(arg1) {
+  return window['go']['main']['App']['OpenExternal'](arg1);
+}
+
+export function OpenPath(arg1) {
+  return window['go']['main']['App']['OpenPath'](arg1);
 }
 
 export function Pause() {
@@ -170,8 +190,16 @@ export function RenamePath(arg1) {
   return window['go']['main']['App']['RenamePath'](arg1);
 }
 
+export function RestartMCPServer(arg1) {
+  return window['go']['main']['App']['RestartMCPServer'](arg1);
+}
+
 export function Resume() {
   return window['go']['main']['App']['Resume']();
+}
+
+export function RevealPath(arg1) {
+  return window['go']['main']['App']['RevealPath'](arg1);
 }
 
 export function RunScheduledTaskNow(arg1) {
@@ -246,8 +274,16 @@ export function SetBotName(arg1) {
   return window['go']['main']['App']['SetBotName'](arg1);
 }
 
+export function SetMCPToolPolicy(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetMCPToolPolicy'](arg1, arg2, arg3);
+}
+
 export function SetModel(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetModel'](arg1, arg2, arg3);
+}
+
+export function SetPrimaryProject(arg1) {
+  return window['go']['main']['App']['SetPrimaryProject'](arg1);
 }
 
 export function SetTheme(arg1) {
@@ -262,8 +298,16 @@ export function Skills() {
   return window['go']['main']['App']['Skills']();
 }
 
+export function StartMCPServer(arg1) {
+  return window['go']['main']['App']['StartMCPServer'](arg1);
+}
+
 export function State() {
   return window['go']['main']['App']['State']();
+}
+
+export function StopMCPServer(arg1) {
+  return window['go']['main']['App']['StopMCPServer'](arg1);
 }
 
 export function Submit(arg1) {
@@ -292,4 +336,8 @@ export function ToggleMCPServer(arg1, arg2) {
 
 export function Usage() {
   return window['go']['main']['App']['Usage']();
+}
+
+export function UsageSummary() {
+  return window['go']['main']['App']['UsageSummary']();
 }

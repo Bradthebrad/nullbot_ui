@@ -5,7 +5,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/csv"
 	"encoding/json"
 	"encoding/xml"
@@ -21,15 +20,15 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/wailsapp/wails/v2/pkg/options"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
 	nullbot "github.com/Bradthebrad/nullbot/pkg/app"
-	"github.com/Bradthebrad/tinychain/mcp"
 )
 
 const (
-	maxPreviewBytes = 2 * 1024 * 1024
-	maxDataURLBytes = 14 * 1024 * 1024
+	maxPreviewBytes       = 2 * 1024 * 1024
+	maxStreamPreviewBytes = 512 * 1024 * 1024
 )
 
 type App struct {
@@ -39,6 +38,10 @@ type App struct {
 	submitMu     sync.Mutex
 	rootDir      string
 	activityStop func()
+	changesStop  func()
+	batcher      *activityBatcher
+	changes      *changeDebouncer
+	localFiles   *localFiles
 }
 
 type UIState struct {
@@ -47,6 +50,9 @@ type UIState struct {
 	Keys        MaskedAPIKeys             `json:"keys"`
 	Runtime     map[string]any            `json:"runtime"`
 	Models      []nullbot.ModelGroup      `json:"models"`
+	ModelsFresh bool                      `json:"models_fresh"`
+	MCP         []nullbot.MCPServerStatus `json:"mcp"`
+	Projects    ProjectsState             `json:"projects"`
 	Themes      []ThemePalette            `json:"themes"`
 	Usage       nullbot.UsageSnapshot     `json:"usage"`
 	Tasks       []nullbot.AgentTask       `json:"tasks"`
@@ -123,7 +129,8 @@ type FilePreview struct {
 	Editable  bool       `json:"editable"`
 	Truncated bool       `json:"truncated"`
 	Content   string     `json:"content,omitempty"`
-	DataURL   string     `json:"data_url,omitempty"`
+	DataURL   string     `json:"data_url,omitempty"` // a /__local/ URL for images and PDFs
+	URL       string     `json:"url,omitempty"`
 	Rows      [][]string `json:"rows,omitempty"`
 	Headers   []string   `json:"headers,omitempty"`
 	Error     string     `json:"error,omitempty"`
@@ -195,13 +202,17 @@ type MCPInput struct {
 	Command   string            `json:"command"`
 	Args      []string          `json:"args"`
 	Env       map[string]string `json:"env"`
+	Headers   map[string]string `json:"headers"`
 	Enabled   bool              `json:"enabled"`
 }
 
 type MCPToolInfo struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	InputSchema map[string]any `json:"input_schema,omitempty"`
+	Name        string                  `json:"name"`
+	Title       string                  `json:"title,omitempty"`
+	Description string                  `json:"description"`
+	InputSchema map[string]any          `json:"input_schema,omitempty"`
+	Requirement nullbot.ToolRequirement `json:"requirement"`
+	Policy      string                  `json:"policy,omitempty"`
 }
 
 type PromptDefaults struct {
@@ -264,8 +275,9 @@ func NewApp() *App {
 	cfg, err := nullbot.LoadOrInitConfig()
 	cwd, _ := os.Getwd()
 	a := &App{
-		initErr: err,
-		rootDir: filepath.Dir(cwd),
+		initErr:    err,
+		rootDir:    filepath.Dir(cwd),
+		localFiles: newLocalFiles(),
 	}
 	if err == nil {
 		a.bot = nullbot.New(cfg)
@@ -279,19 +291,52 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	if a.activityStop == nil && a.bot != nil {
 		a.bot.StartScheduler()
+		// Activity reaches the UI as arrays: streamed fragments are merged and
+		// flushed about 30 times a second; everything else flushes at once.
+		a.batcher = newActivityBatcher(func(batch []nullbot.ActivityRecord) { a.emit("activity", batch) })
 		a.activityStop = a.bot.SubscribeActivity(func(record nullbot.ActivityRecord) {
-			a.emit("activity", record)
+			a.batcher.add(record)
 			a.publishSubmissionCompletion(record)
-			if record.Kind == "on_llm_new_token" || record.Kind == "on_llm_reasoning" || record.Kind == "on_chat_model_start" || record.Kind == "on_llm_end" || record.Kind == "on_llm_error" {
-				a.emit("agent:stream", record)
-			}
 		})
+		a.changes = newChangeDebouncer(a.publishChange)
+		a.changesStop = a.bot.SubscribeChanges(a.changes.notify)
 	}
 	if a.initErr != nil {
 		a.emit("status", map[string]string{"message": a.initErr.Error()})
 	}
 }
 
+// shutdown stops background work and every MCP server process.
+func (a *App) shutdown(ctx context.Context) {
+	if a.activityStop != nil {
+		a.activityStop()
+		a.activityStop = nil
+	}
+	if a.changesStop != nil {
+		a.changesStop()
+		a.changesStop = nil
+	}
+	if a.changes != nil {
+		a.changes.stop()
+	}
+	if a.bot != nil {
+		a.bot.Shutdown()
+	}
+}
+
+// onSecondInstance brings the existing window forward instead of starting a
+// second copy of the app (and a second set of MCP servers).
+func (a *App) onSecondInstance(options.SecondInstanceData) {
+	if a.ctx == nil {
+		return
+	}
+	wailsRuntime.WindowUnminimise(a.ctx)
+	wailsRuntime.WindowShow(a.ctx)
+}
+
+// State returns everything the UI needs to render, without network calls:
+// the model catalog comes from cache (ModelCatalog fetches), usage is a
+// summary, and MCP servers report their live state.
 func (a *App) State() (UIState, error) {
 	if a.initErr != nil {
 		return UIState{}, a.initErr
@@ -301,15 +346,18 @@ func (a *App) State() (UIState, error) {
 	keys := a.bot.APIKeys()
 	market := a.marketState(false)
 	files, _ := a.listFiles(config.WorkspaceDir)
-	models := nullbot.DiscoverModelGroups(context.Background(), config)
+	models, fresh := nullbot.PeekModelGroups(config)
 	return UIState{
 		Reply:       reply,
 		Config:      config,
 		Keys:        maskKeys(keys),
 		Runtime:     nullbot.RuntimeStatus(config),
 		Models:      models,
+		ModelsFresh: fresh,
+		MCP:         a.bot.MCPStatus(false),
+		Projects:    a.Projects(),
 		Themes:      themeCatalog(),
-		Usage:       a.bot.UsageSnapshot(),
+		Usage:       a.bot.UsageSummary(),
 		Tasks:       a.bot.TaskSnapshots(),
 		Scheduled:   a.bot.ScheduledTasks(),
 		Thoughts:    a.bot.ThoughtSnapshots(),
@@ -652,7 +700,7 @@ func (a *App) PromptDefaults() (PromptDefaults, error) {
 }
 
 func (a *App) Models() ([]nullbot.ModelGroup, error) {
-	return nullbot.DiscoverModelGroups(context.Background(), a.bot.Config()), nil
+	return a.ModelCatalog(false), nil
 }
 
 func (a *App) ListFiles(path string) (FileBrowser, error) {
@@ -767,26 +815,20 @@ func (a *App) PreviewFile(path string) (FilePreview, error) {
 		Editable: isEditableKind(kind, ext, info.Size()),
 	}
 	switch kind {
-	case "image":
-		if info.Size() > maxDataURLBytes {
-			preview.Error = "Image is too large for inline preview."
+	case "image", "pdf":
+		// Streamed by the asset server by token; no base64 copy over IPC.
+		if info.Size() > maxStreamPreviewBytes {
+			preview.Error = "File is too large for inline preview. Use Open to view it."
 			return preview, nil
 		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return preview, err
+		if kind == "pdf" {
+			mimeType = "application/pdf"
 		}
-		preview.DataURL = "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(data)
-	case "pdf":
-		if info.Size() > maxDataURLBytes {
-			preview.Error = "PDF is too large for inline preview. Use Open to view it externally."
-			return preview, nil
+		if a.localFiles == nil {
+			a.localFiles = newLocalFiles()
 		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return preview, err
-		}
-		preview.DataURL = "data:application/pdf;base64," + base64.StdEncoding.EncodeToString(data)
+		preview.URL = a.localFiles.register(path, mimeType)
+		preview.DataURL = preview.URL
 	case "csv":
 		content, truncated, err := readTextPreview(path)
 		if err != nil {
@@ -1150,53 +1192,30 @@ func (a *App) MCPState() (map[string]any, error) {
 	}, nil
 }
 
+// DiscoverMCPTools starts the server if needed (through the shared pool) and
+// lists its tools with the capability each is treated as needing.
 func (a *App) DiscoverMCPTools(id string) ([]MCPToolInfo, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return nil, fmt.Errorf("server id is required")
 	}
-	config := a.bot.Config()
-	entry, ok := config.EnabledMCPServers[id]
+	entry, ok := a.bot.Config().EnabledMCPServers[id]
 	if !ok {
 		return nil, fmt.Errorf("MCP server %q is not configured", id)
 	}
 	if !entry.Enabled {
 		return nil, fmt.Errorf("MCP server %q is disabled", id)
 	}
-	if err := nullbot.ValidateProjects(config); err != nil {
-		return nil, err
-	}
-	if len(config.Projects) == 0 {
-		return nil, fmt.Errorf("MCP discovery requires all projects to have Full access")
-	}
-	for _, project := range config.Projects {
-		if project.Permission != "full" {
-			return nil, fmt.Errorf("MCP discovery requires all projects to have Full access")
-		}
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	client, err := mcpClientForEntry(ctx, entry)
-	if err != nil {
+	if err := a.bot.StartMCPServer(ctx, id); err != nil {
 		return nil, err
 	}
-	defer client.Close()
-	if _, err := client.Initialize(ctx); err != nil {
-		return nil, err
+	status, _ := a.bot.MCPServerStatusByID(id)
+	out := make([]MCPToolInfo, 0, len(status.Tools))
+	for _, tool := range status.Tools {
+		out = append(out, MCPToolInfo{Name: tool.Name, Title: tool.Title, Description: tool.Description, InputSchema: tool.InputSchema, Requirement: tool.Requirement, Policy: tool.Policy})
 	}
-	tools, err := client.ListTools(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]MCPToolInfo, 0, len(tools))
-	for _, tool := range tools {
-		out = append(out, MCPToolInfo{
-			Name:        tool.Name,
-			Description: tool.Description,
-			InputSchema: tool.InputSchema,
-		})
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
 }
 
@@ -1223,17 +1242,20 @@ func (a *App) AddMCPServer(input MCPInput) (UIState, error) {
 		return UIState{}, fmt.Errorf("command or endpoint is required")
 	}
 	err := a.bot.UpdateConfig(func(config *nullbot.Config) {
-		if config.EnabledMCPServers == nil {
-			config.EnabledMCPServers = map[string]nullbot.MCPEntry{}
+		servers := make(map[string]nullbot.MCPEntry, len(config.EnabledMCPServers)+1)
+		for k, v := range config.EnabledMCPServers {
+			servers[k] = v
 		}
-		config.EnabledMCPServers[id] = nullbot.MCPEntry{
+		servers[id] = nullbot.MCPEntry{
 			Name:      firstNonEmpty(input.Name, id),
 			Command:   command,
 			Args:      args,
 			Env:       input.Env,
+			Headers:   input.Headers,
 			Transport: transport,
 			Enabled:   input.Enabled,
 		}
+		config.EnabledMCPServers = servers
 	})
 	if err != nil {
 		return UIState{}, err
@@ -1255,9 +1277,11 @@ func (a *App) ToggleMCPServer(id, action string) (UIState, error) {
 	case "enable":
 		if _, ok := config.EnabledMCPServers[id]; ok {
 			err = a.bot.UpdateConfig(func(config *nullbot.Config) {
-				entry := config.EnabledMCPServers[id]
+				servers := copyServers(config.EnabledMCPServers)
+				entry := servers[id]
 				entry.Enabled = true
-				config.EnabledMCPServers[id] = entry
+				servers[id] = entry
+				config.EnabledMCPServers = servers
 			})
 		} else {
 			next, err = nullbot.EnableMCPServer(config, id)
@@ -1267,14 +1291,18 @@ func (a *App) ToggleMCPServer(id, action string) (UIState, error) {
 		}
 	case "disable":
 		err = a.bot.UpdateConfig(func(config *nullbot.Config) {
-			if entry, ok := config.EnabledMCPServers[id]; ok {
+			servers := copyServers(config.EnabledMCPServers)
+			if entry, ok := servers[id]; ok {
 				entry.Enabled = false
-				config.EnabledMCPServers[id] = entry
+				servers[id] = entry
 			}
+			config.EnabledMCPServers = servers
 		})
 	case "remove":
 		err = a.bot.UpdateConfig(func(config *nullbot.Config) {
-			delete(config.EnabledMCPServers, id)
+			servers := copyServers(config.EnabledMCPServers)
+			delete(servers, id)
+			config.EnabledMCPServers = servers
 		})
 	default:
 		err = fmt.Errorf("unsupported MCP action %q", action)
@@ -1734,17 +1762,14 @@ func (a *App) marketState(refresh bool) MarketState {
 	return state
 }
 
-func mcpClientForEntry(ctx context.Context, entry nullbot.MCPEntry) (*mcp.Client, error) {
-	switch strings.ToLower(strings.TrimSpace(entry.Transport)) {
-	case "", "stdio":
-		return mcp.NewStdioClientWithEnv(ctx, entry.Command, entry.Args, entry.Env)
-	case "http", "streamable-http", "streamable_http":
-		return mcp.NewHTTPClient(entry.Command, nil), nil
-	case "sse":
-		return mcp.NewSSEClient(entry.Command, nil), nil
-	default:
-		return nil, fmt.Errorf("unsupported MCP transport %q", entry.Transport)
+// copyServers copies the server map so updates never mutate the live config
+// before it validates and saves.
+func copyServers(in map[string]nullbot.MCPEntry) map[string]nullbot.MCPEntry {
+	out := make(map[string]nullbot.MCPEntry, len(in))
+	for k, v := range in {
+		out[k] = v
 	}
+	return out
 }
 
 func (a *App) scanLocalMCPServers() []LocalMCPServer {
