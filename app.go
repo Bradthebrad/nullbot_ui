@@ -224,8 +224,12 @@ type SessionSummary struct {
 	SessionID string    `json:"session_id"`
 	Path      string    `json:"path"`
 	Messages  int       `json:"messages"`
+	Title     string    `json:"title,omitempty"`
 	Preview   string    `json:"preview"`
 	Modified  time.Time `json:"modified"`
+	// Matches and Snippet are set by SearchSessions.
+	Matches int    `json:"matches,omitempty"`
+	Snippet string `json:"snippet,omitempty"`
 }
 
 type persistedMessage struct {
@@ -1365,6 +1369,8 @@ func (a *App) ToggleMCPServer(id, action string) (UIState, error) {
 	return a.State()
 }
 
+// Sessions lists saved sessions, newest first. Only the sessions returned
+// are read.
 func (a *App) Sessions(limit int) ([]SessionSummary, error) {
 	if limit <= 0 {
 		limit = 100
@@ -1375,35 +1381,48 @@ func (a *App) Sessions(limit int) ([]SessionSummary, error) {
 	if err != nil {
 		return nil, nil
 	}
-	var sessions []SessionSummary
+	type candidate struct {
+		name string
+		mod  time.Time
+	}
+	var files []candidate
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
 			continue
 		}
-		path := filepath.Join(dir, entry.Name())
 		info, err := entry.Info()
 		if err != nil {
 			continue
 		}
-		messages, _ := readSessionFile(path, 0)
-		preview := ""
-		if len(messages) > 0 {
-			last := messages[len(messages)-1]
-			preview = last.Role + ": " + truncateRunes(strings.ReplaceAll(last.Content, "\n", " "), 160)
-		}
-		sessions = append(sessions, SessionSummary{
-			SessionID: strings.TrimSuffix(entry.Name(), ".jsonl"),
-			Path:      path,
-			Messages:  len(messages),
-			Preview:   preview,
-			Modified:  info.ModTime(),
-		})
+		files = append(files, candidate{entry.Name(), info.ModTime()})
 	}
-	sort.Slice(sessions, func(i, j int) bool { return sessions[i].Modified.After(sessions[j].Modified) })
-	if len(sessions) > limit {
-		sessions = sessions[:limit]
+	sort.Slice(files, func(i, j int) bool { return files[i].mod.After(files[j].mod) })
+	if len(files) > limit {
+		files = files[:limit]
+	}
+	sessions := make([]SessionSummary, 0, len(files))
+	for _, file := range files {
+		sessions = append(sessions, summarizeSession(filepath.Join(dir, file.name), file.mod))
 	}
 	return sessions, nil
+}
+
+// summarizeSession titles a session by its first request and previews its
+// last message.
+func summarizeSession(path string, modified time.Time) SessionSummary {
+	messages, _ := readSessionFile(path, 0)
+	summary := SessionSummary{SessionID: strings.TrimSuffix(filepath.Base(path), ".jsonl"), Path: path, Messages: len(messages), Modified: modified}
+	for _, message := range messages {
+		if message.Role == "user" && strings.TrimSpace(message.Content) != "" && message.Lane != "also" {
+			summary.Title = truncateRunes(strings.Join(strings.Fields(message.Content), " "), 120)
+			break
+		}
+	}
+	if len(messages) > 0 {
+		last := messages[len(messages)-1]
+		summary.Preview = last.Role + ": " + truncateRunes(strings.ReplaceAll(last.Content, "\n", " "), 160)
+	}
+	return summary
 }
 
 func (a *App) ReadSession(sessionID string, limit int) ([]nullbot.Message, error) {
@@ -1437,24 +1456,65 @@ func (a *App) LoadSession(sessionID string, limit int) (nullbot.Reply, error) {
 	return reply, nil
 }
 
+// SearchSessions lists sessions with a message or tool call matching query,
+// most recent match first, each with its first match as a snippet.
 func (a *App) SearchSessions(query string) ([]SessionSummary, error) {
-	query = strings.ToLower(strings.TrimSpace(query))
-	sessions, err := a.Sessions(1000)
-	if err != nil || query == "" {
-		return sessions, err
+	if strings.TrimSpace(query) == "" {
+		return a.Sessions(1000)
 	}
-	var matches []SessionSummary
-	for _, session := range sessions {
-		messages, _ := readSessionFile(session.Path, 0)
-		hay := strings.ToLower(session.SessionID + " " + session.Preview)
-		for _, msg := range messages {
-			hay += " " + strings.ToLower(msg.Content)
-		}
-		if strings.Contains(hay, query) {
-			matches = append(matches, session)
-		}
+	result, err := nullbot.SearchHistory(a.bot.Config(), nullbot.HistoryQuery{Text: query, Limit: 200})
+	if err != nil {
+		return nil, err
 	}
-	return matches, nil
+	return a.sessionsForHits(result.Hits), nil
+}
+
+// SearchSessionsWith lists sessions with matches for a filtered search, most
+// recent match first.
+func (a *App) SearchSessionsWith(query nullbot.HistoryQuery) ([]SessionSummary, error) {
+	query.SessionID = ""
+	if query.Limit <= 0 {
+		query.Limit = 200
+	}
+	result, err := nullbot.SearchHistory(a.bot.Config(), query)
+	if err != nil {
+		return nil, err
+	}
+	return a.sessionsForHits(result.Hits), nil
+}
+
+func (a *App) sessionsForHits(hits []nullbot.HistoryHit) []SessionSummary {
+	dir := filepath.Join(a.bot.Config().AppDir, "history")
+	index := map[string]int{}
+	var sessions []SessionSummary
+	for _, hit := range hits {
+		if i, ok := index[hit.SessionID]; ok {
+			sessions[i].Matches++
+			continue
+		}
+		path := filepath.Join(dir, hit.SessionID+".jsonl")
+		modified := time.Time{}
+		if info, err := os.Stat(path); err == nil {
+			modified = info.ModTime()
+		}
+		summary := summarizeSession(path, modified)
+		summary.Matches, summary.Snippet = 1, hit.Snippet
+		index[hit.SessionID] = len(sessions)
+		sessions = append(sessions, summary)
+	}
+	return sessions
+}
+
+// SearchHistory searches saved messages and tool calls with filters; see
+// nullbot.HistoryQuery.
+func (a *App) SearchHistory(query nullbot.HistoryQuery) (nullbot.HistorySearchResult, error) {
+	return nullbot.SearchHistory(a.bot.Config(), query)
+}
+
+// SessionEntries returns a session's messages and, optionally, the tool calls
+// made during it, in time order.
+func (a *App) SessionEntries(sessionID string, includeTools bool) ([]nullbot.HistoryEntry, error) {
+	return nullbot.HistorySessionEntries(a.bot.Config(), sessionID, includeTools)
 }
 
 func (a *App) SaveCurrentSession(name string) (SessionSummary, error) {

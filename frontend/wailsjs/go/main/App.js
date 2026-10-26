@@ -250,8 +250,16 @@ export function ScheduledTasks() {
   return window['go']['main']['App']['ScheduledTasks']();
 }
 
+export function SearchHistory(arg1) {
+  return window['go']['main']['App']['SearchHistory'](arg1);
+}
+
 export function SearchSessions(arg1) {
   return window['go']['main']['App']['SearchSessions'](arg1);
+}
+
+export function SearchSessionsWith(arg1) {
+  return window['go']['main']['App']['SearchSessionsWith'](arg1);
 }
 
 export function SendAlso(arg1) {
@@ -264,6 +272,10 @@ export function ServiceAccountCatalog() {
 
 export function ServiceAccountStatus() {
   return window['go']['main']['App']['ServiceAccountStatus']();
+}
+
+export function SessionEntries(arg1, arg2) {
+  return window['go']['main']['App']['SessionEntries'](arg1, arg2);
 }
 
 export function Sessions(arg1) {

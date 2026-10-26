@@ -10,7 +10,7 @@ left.
 | Repo | Branch commits (oldest first) |
 | --- | --- |
 | tinychain | `eac2c06` MCP: spec metadata, multiplexed stdio, roots, remote sessions, tree kill |
-| nullbot | `0dcb3f5` WIP snapshot of your uncommitted service-accounts work, then `158724b` permissions, MCP session pool, bounded memory; `0591fc2` network-free model lists; `1f1a1b6` appearance and accent config; `c5f2fe4` access checks per capability, outside paths refused before any I/O |
+| nullbot | `0dcb3f5` WIP snapshot of your uncommitted service-accounts work, then `158724b` permissions, MCP session pool, bounded memory; `0591fc2` network-free model lists; `1f1a1b6` appearance and accent config; `c5f2fe4` access checks per capability, outside paths refused before any I/O; `24bcdaa` tool calls saved per session, searchable history for agents |
 | nullbot_ui | `ff2ff9f` WIP snapshot of your uncommitted service-accounts work, then `bf76dd2` bridge (batched activity, push events, streamed previews, safe links); `4f59f73` the redesign; then this handoff and the fixes from an independent review |
 
 The two WIP commits are your local, uncommitted work as it was on your disk
@@ -100,7 +100,13 @@ and change-driven refetch).
   disk. Deleting needs the project's delete permission; editing and
   renaming need write. Unsaved edits ask before they're discarded.
 - **Memory stays flat.** Streamed tokens are batched, nothing polls, and the
-  activity history is capped.
+  activity kept in memory is capped. Nothing on disk is trimmed.
+- **History is searchable, by agents and in the app.** Every message and
+  every finished tool call is saved per session. Agents get
+  `history_search` (words, role, tool, session, time range, paging) and a
+  `history_session_read` that reads any range at full length with the tool
+  calls in between. The History view searches the same way, with filters for
+  time and for messages or tool calls. See `nullbot/docs/HISTORY.md`.
 - **New look.** Clean panes, IBM Plex type, light and dark themes and five
   signal colors (Settings → Appearance). Ctrl+K opens commands; Ctrl+1–5
   switch views; Ctrl+. shows or hides the activity panel.

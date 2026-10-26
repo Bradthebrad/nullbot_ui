@@ -156,7 +156,17 @@ export type FilePreview = {
 };
 
 export type SkillFile = {name: string; description: string; path: string; root: string; modified: string; size: number};
-export type SessionSummary = {session_id: string; path: string; messages: number; preview: string; modified: string};
+export type SessionSummary = {session_id: string; path: string; messages: number; title?: string; preview: string; modified: string; matches?: number; snippet?: string};
+
+export type SavedToolCall = {
+  session_id: string; time: string; submission_id?: string; lane?: string; agent_id?: string; task_id?: string;
+  status: string; tool?: string; server?: string; args?: Record<string, unknown>; result?: string; error?: string; detail?: string;
+  duration_ms?: number; permission?: Record<string, unknown>;
+};
+export type HistoryEntry = {kind: 'message' | 'tool'; index: number; message?: ChatMessage; tool?: SavedToolCall};
+export type HistoryQuery = {text?: string; session_id?: string; roles?: string[]; tool?: string; since?: string; until?: string; limit?: number; offset?: number};
+export type HistoryHit = {session_id: string; kind: 'message' | 'tool'; index: number; role?: string; tool?: string; server?: string; status?: string; time: string; submission_id?: string; snippet: string};
+export type HistorySearchResult = {hits: HistoryHit[]; more: boolean; sessions_searched: number};
 
 export type UsageTotals = {requests?: number; input_tokens?: number; output_tokens?: number; total_tokens?: number; cached_input_tokens?: number; reasoning_output_tokens?: number; cost_usd?: number; estimated?: number};
 export type UsageReport = {records: any[]; totals: UsageTotals; buckets: {key: string; totals: UsageTotals}[]; markdown: string; path?: string};

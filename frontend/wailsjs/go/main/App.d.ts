@@ -127,13 +127,19 @@ export function SaveUsageReport(arg1:main.UsageFilter):Promise<main.UsageReport>
 
 export function ScheduledTasks():Promise<Array<app.ScheduledTask>>;
 
+export function SearchHistory(arg1:any):Promise<any>;
+
 export function SearchSessions(arg1:string):Promise<Array<main.SessionSummary>>;
+
+export function SearchSessionsWith(arg1:any):Promise<Array<main.SessionSummary>>;
 
 export function SendAlso(arg1:string):Promise<app.Reply>;
 
 export function ServiceAccountCatalog():Promise<Array<app.ServiceDefinition>>;
 
 export function ServiceAccountStatus():Promise<app.ServiceAccountState>;
+
+export function SessionEntries(arg1:string,arg2:boolean):Promise<Array<any>>;
 
 export function Sessions(arg1:number):Promise<Array<main.SessionSummary>>;
 

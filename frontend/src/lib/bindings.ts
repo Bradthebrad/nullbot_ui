@@ -2,7 +2,7 @@
 // newer methods; this module is the one place the UI names bridge calls.
 import * as Go from '../../wailsjs/go/main/App';
 import type {
-  AgentTask, FileBrowser, FilePreview, MCPServerStatus, MarketState, ModelGroup, Plan, ProjectsState, Project,
+  AgentTask, FileBrowser, HistoryEntry, HistoryQuery, HistorySearchResult, FilePreview, MCPServerStatus, MarketState, ModelGroup, Plan, ProjectsState, Project,
   Reply, ScheduledTask, SessionSummary, SkillFile, SubmissionSnapshot, UIState, UsageReport,
 } from './types';
 
@@ -79,6 +79,9 @@ export const api = {
 
   sessions: (limit: number) => call<SessionSummary[]>('Sessions', limit),
   searchSessions: (query: string) => call<SessionSummary[]>('SearchSessions', query),
+  searchSessionsWith: (query: HistoryQuery) => call<SessionSummary[]>('SearchSessionsWith', query),
+  searchHistory: (query: HistoryQuery) => call<HistorySearchResult>('SearchHistory', query),
+  sessionEntries: (id: string, includeTools: boolean) => call<HistoryEntry[]>('SessionEntries', id, includeTools),
   readSession: (id: string, limit: number) => call<any[]>('ReadSession', id, limit),
   loadSession: (id: string, limit: number) => call<Reply>('LoadSession', id, limit),
   saveCurrentSession: (name: string) => call<SessionSummary>('SaveCurrentSession', name),

@@ -122,3 +122,36 @@ func TestUsageDatesAreLocalDays(t *testing.T) {
 		t.Fatalf("RFC3339 offset lost: %v", got)
 	}
 }
+
+// Session search goes through the shared history search: titles come from
+// the first request, and each session carries its first match and count.
+func TestSearchSessionsUsesHistorySearch(t *testing.T) {
+	c := permissionConfig(t, "read-only")
+	app := permissionApp(c)
+	dir := filepath.Join(c.AppDir, "history")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	write := func(name string, lines ...string) {
+		if err := os.WriteFile(filepath.Join(dir, name+".jsonl"), []byte(strings.Join(lines, "\n")+"\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("a", `{"message":{"role":"user","content":"Reconcile invoices","time":"2026-10-20T09:00:00Z"}}`, `{"message":{"role":"assistant","content":"Three invoices are off: INV-104","time":"2026-10-20T09:01:00Z"}}`)
+	write("b", `{"message":{"role":"user","content":"Weather?","time":"2026-10-21T09:00:00Z"}}`)
+	got, err := app.SearchSessions("invoices")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].SessionID != "a" || got[0].Title != "Reconcile invoices" || got[0].Matches != 2 || !strings.Contains(got[0].Snippet, "invoices") {
+		t.Fatalf("search = %+v", got)
+	}
+	users, err := app.SearchSessionsWith(nullbot.HistoryQuery{Roles: []string{"user"}, Text: "weather"})
+	if err != nil || len(users) != 1 || users[0].SessionID != "b" {
+		t.Fatalf("filtered = %+v, %v", users, err)
+	}
+	entries, err := app.SessionEntries("a", true)
+	if err != nil || len(entries) != 2 || entries[1].Message.Content != "Three invoices are off: INV-104" {
+		t.Fatalf("entries = %+v, %v", entries, err)
+	}
+}
