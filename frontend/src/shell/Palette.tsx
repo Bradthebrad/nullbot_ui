@@ -35,7 +35,7 @@ function useCommands(): Command[] {
         if (await confirmDialog({title: 'Start a new conversation?', body: 'The visible conversation is cleared. Saved sessions are kept.', confirmLabel: 'Start new'})) await clearConversation();
       }},
       {id: 'compact', group: 'Conversation', title: 'Compact the conversation', keywords: 'summarize context', run: async () => {
-        const focus = await promptDialog({title: 'Compact the conversation', label: 'Focus (optional)', placeholder: 'What to keep in detail', confirmLabel: 'Compact', optional: true, body: 'Older messages are summarized so the model has room for new work.'});
+        const focus = await promptDialog({title: 'Compact the conversation', label: 'Focus (optional)', placeholder: 'What to keep in detail', confirmLabel: 'Compact', optional: true, body: 'The model summarizes the conversation so far. New requests start from the summary; the messages stay in the chat and in history.'});
         if (focus !== null) await compactConversation(focus);
       }},
       {id: 'analyze', group: 'Conversation', title: 'Analyze the workspace', run: async () => {
