@@ -289,21 +289,56 @@ export async function createPlan(focus: string) {
   }
 }
 
-export async function stopRun() {
+/** The run's control state, for the top bar, palette and composer. */
+export type RunPhase = 'idle' | 'working' | 'pausing' | 'paused' | 'stopping' | 'held';
+export function runPhase(state: ChatState): RunPhase {
+  const s = state.submissions;
+  const running = !!s.primary_id;
+  if (running && s.stopping) return 'stopping';
+  if (running && s.run_paused) return 'paused';
+  if (running) return 'working';
+  if (s.paused && s.queue?.length) return 'held';
+  return 'idle';
+}
+
+async function control(run: () => Promise<Reply>) {
   try {
-    await api.pause();
-    toast('Stopping. Queued requests wait until you resume.');
+    const reply = await run();
+    if (reply?.data?.submissions) chatStore.set({submissions: reply.data.submissions});
+    return reply;
   } catch (error) {
     toastError(error);
+    return null;
   }
 }
 
+/** Steps under way finish; then the manager and its subagents wait. */
+export async function pauseRuns() {
+  if (await control(api.pause)) toast('Pausing. Steps already under way finish first.');
+}
+
 export async function resumeRuns() {
+  if (await control(api.resume)) toast('Resumed.');
+}
+
+/** The request wraps up: no new tool calls, then a summary of what was done. */
+export async function stopRun() {
+  if (await control(api.stopRun)) toast('Stopping after the current step.');
+}
+
+/** Cancels everything now, tool calls included, and holds the queue. */
+export async function stopEverything() {
+  if (await control(api.stopEverything)) toast('Stopped everything. Queued requests wait until you resume.');
+}
+
+export async function steerSubagent(taskID: string, text: string) {
   try {
-    await api.resume();
-    toast('Resumed.');
+    await api.steerSubagent(taskID, text);
+    toast('Guidance sent to the subagent.');
+    return true;
   } catch (error) {
     toastError(error);
+    return false;
   }
 }
 

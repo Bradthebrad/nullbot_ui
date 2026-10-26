@@ -3,6 +3,7 @@
 import {beforeEach, describe, expect, it} from 'vitest';
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {installBridge, type FakeBridge} from '../../test/bridge';
+import {ModelsSettings} from './ModelsSettings';
 import {AgentSettings} from './AgentSettings';
 import {appStore} from '../../state/app';
 
@@ -15,11 +16,11 @@ beforeEach(() => {
   });
 });
 
-describe('Agent settings: context window', () => {
+describe('Model settings: context window', () => {
   it('keeps each digit typed and saves only a usable size', async () => {
-    render(<AgentSettings />);
-    const field = await screen.findByRole('spinbutton', {name: /Context window/}) as HTMLInputElement;
-    await screen.findByText(/Typical for this model family/);
+    render(<ModelsSettings />);
+    const field = (await screen.findAllByRole('spinbutton', {name: /Context window/}))[0] as HTMLInputElement;
+    await screen.findAllByText(/Typical for this model family/);
     const save = screen.getByRole('button', {name: 'Save settings'}) as HTMLButtonElement;
     fireEvent.change(field, {target: {value: '1'}});
     expect(field.value).toBe('1');
@@ -35,7 +36,6 @@ describe('Agent settings: context window', () => {
 
   it('says what turning automatic compaction off does', async () => {
     render(<AgentSettings />);
-    await screen.findByText(/Typical for this model family/);
     fireEvent.click(screen.getByRole('checkbox', {name: 'Shorten and summarize automatically'}));
     expect(screen.getByText(/nothing is shortened or summarized/)).toBeTruthy();
   });

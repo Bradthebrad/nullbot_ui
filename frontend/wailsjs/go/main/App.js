@@ -330,8 +330,20 @@ export function State() {
   return window['go']['main']['App']['State']();
 }
 
+export function SteerSubagent(arg1, arg2) {
+  return window['go']['main']['App']['SteerSubagent'](arg1, arg2);
+}
+
+export function StopEverything() {
+  return window['go']['main']['App']['StopEverything']();
+}
+
 export function StopMCPServer(arg1) {
   return window['go']['main']['App']['StopMCPServer'](arg1);
+}
+
+export function StopRun() {
+  return window['go']['main']['App']['StopRun']();
 }
 
 export function Submit(arg1) {

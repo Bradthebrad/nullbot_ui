@@ -1,8 +1,8 @@
-import {ChevronDown, Folder, PanelRight, Play, Search, Square} from 'lucide-react';
+import {ChevronDown, Folder, PanelRight, Pause, Play, Search, Square} from 'lucide-react';
 import {useStore, shallowEqual} from '../lib/store';
 import {api} from '../lib/bindings';
 import {appStore, applyUIState, openSettings, setView, toggleInspector, type View} from '../state/app';
-import {chatStore, isBusy, resumeRuns, stopRun} from '../state/chat';
+import {chatStore, pauseRuns, resumeRuns, runPhase, stopEverything, stopRun} from '../state/chat';
 import {MenuButton, type MenuItem} from '../ui/Menu';
 import {toast, toastError} from '../ui/toast';
 import {formatDuration, permissionLabel, shorten} from '../lib/format';
@@ -86,12 +86,13 @@ function ProjectSwitcher() {
 }
 
 function ModelSwitcher() {
-  const {model, provider, effort} = useStore(appStore, state => ({model: state.runtime.model, provider: state.runtime.provider, effort: state.runtime.reasoning_effort}), shallowEqual);
+  const {model, provider, effort, subProvider, subModel} = useStore(appStore, state => ({model: state.runtime.model, provider: state.runtime.provider, effort: state.runtime.reasoning_effort, subProvider: state.runtime.subagent_provider, subModel: state.runtime.subagent_model}), shallowEqual);
+  const subagents = !subModel || (subProvider === provider && subModel === model) ? 'the same model' : `${subProvider}/${subModel}`;
   const models = useStore(appStore, state => state.models);
   const group = models.find(g => g.provider === provider);
   const options = (group?.models || []).slice(0, 14);
   const items: MenuItem[] = [
-    {kind: 'heading', label: provider ? `${provider} models` : 'Models'},
+    {kind: 'heading', label: provider ? `Manager: ${provider} models` : 'Manager model'},
     ...options.map(option => ({
       label: option.name || option.id,
       hint: option.name && option.name !== option.id ? shorten(option.id, 28) : undefined,
@@ -106,11 +107,13 @@ function ModelSwitcher() {
       },
     })),
     {kind: 'separator'},
-    {label: 'All models and providers…', onSelect: () => openSettings('models')},
+    {kind: 'heading', label: `Subagents use ${subagents}.`},
+    {label: 'Models for the manager and subagents…', onSelect: () => openSettings('models')},
   ];
   return (
     <MenuButton
       className="btn btn-ghost chip-button"
+      title={`Manager: ${provider}/${model}. Subagents: ${subagents}.`}
       label={<><span className="chip-main">{model || 'Choose a model'}</span>{effort && <span className="chip-sub">{effort}</span>}<ChevronDown size={13} /></>}
       items={items}
     />
@@ -118,30 +121,46 @@ function ModelSwitcher() {
 }
 
 function RunState() {
-  const busy = useStore(chatStore, isBusy);
-  const paused = useStore(chatStore, state => !!state.submissions.paused);
+  const phase = useStore(chatStore, runPhase);
+  const waiting = useStore(chatStore, state => state.submissions.queue?.length || 0);
   const startedAt = useStore(chatStore, state => {
     const turns = state.activity.turns;
     for (let i = turns.length - 1; i >= 0; i--) if (turns[i].state === 'running' && turns[i].lane !== 'also') return turns[i].startedAt || '';
     return '';
   });
-  const now = useNow(busy);
-  if (paused) {
+  const now = useNow(phase === 'working' || phase === 'paused' || phase === 'stopping');
+  if (phase === 'idle') return null;
+  if (phase === 'held') {
     return (
       <div className="runstate">
         <span className="dot idle" />
-        <span>Paused</span>
+        <span>{waiting} request{waiting === 1 ? '' : 's'} waiting</span>
         <button className="btn btn-sm" onClick={() => void resumeRuns()}><Play size={12} />Resume</button>
       </div>
     );
   }
-  if (!busy) return null;
   const elapsed = startedAt ? now - Date.parse(startedAt) : NaN;
+  const time = Number.isFinite(elapsed) ? <span className="num faint"> {formatDuration(elapsed)}</span> : null;
+  const label = phase === 'paused' ? 'Paused' : phase === 'stopping' ? 'Stopping' : 'Working';
   return (
     <div className="runstate" role="status">
-      <span className="dot live" />
-      <span>Working{Number.isFinite(elapsed) ? <span className="num faint"> {formatDuration(elapsed)}</span> : null}</span>
-      <button className="btn btn-sm" onClick={() => void stopRun()}><Square size={11} />Stop</button>
+      <span className={`dot ${phase === 'paused' ? 'idle' : 'live'}`} />
+      <span title={phase === 'paused' ? 'Anything already under way finishes; nothing new starts until you resume.' : phase === 'stopping' ? 'Finishing the current step, then wrapping up.' : undefined}>{label}{time}</span>
+      {phase === 'working' && <button className="btn btn-sm" title="Let the current step finish, then wait" onClick={() => void pauseRuns()}><Pause size={11} />Pause</button>}
+      {phase === 'paused' && <button className="btn btn-sm" onClick={() => void resumeRuns()}><Play size={11} />Resume</button>}
+      <div className="split">
+        <button className="btn btn-sm" disabled={phase === 'stopping'} title="Finish the current step, then wrap up with what was done" onClick={() => void stopRun()}><Square size={11} />Stop</button>
+        <MenuButton
+          className="btn btn-sm btn-icon"
+          label={<ChevronDown size={12} />}
+          title="More ways to stop"
+          align="end"
+          items={[
+            {label: 'Stop after this step', hint: 'Wraps up', disabled: phase === 'stopping', onSelect: () => void stopRun()},
+            {label: 'Stop everything now', hint: 'Cancels tool calls', danger: true, onSelect: () => void stopEverything()},
+          ]}
+        />
+      </div>
     </div>
   );
 }

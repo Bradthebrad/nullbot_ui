@@ -167,7 +167,13 @@ export function StartMCPServer(arg1:string):Promise<any>;
 
 export function State():Promise<main.UIState>;
 
+export function SteerSubagent(arg1:string,arg2:string):Promise<void>;
+
+export function StopEverything():Promise<app.Reply>;
+
 export function StopMCPServer(arg1:string):Promise<Array<any>>;
+
+export function StopRun():Promise<app.Reply>;
 
 export function Submit(arg1:string):Promise<app.Reply>;
 

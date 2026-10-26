@@ -486,3 +486,7 @@ mark { padding: 0 1px; border-radius: 2px; background: var(--signal-soft); color
 .input-suffix { display: flex; align-items: center; gap: 6px; }
 .input-suffix .input { width: 84px; }
 .step-guard { margin: 0 0 var(--s-2); font-size: var(--text-sm); }
+.steer-one { display: flex; gap: var(--s-2); align-items: flex-start; }
+.steer-one .textarea { flex: 1; min-height: 52px; }
+.settings-group-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-2); }
+.model-follow { margin-bottom: var(--s-2); }

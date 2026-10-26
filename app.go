@@ -385,20 +385,43 @@ func (a *App) SendAlso(question string) (nullbot.Reply, error) {
 	return a.SubmitChatRequest(ChatRequest{Mode: "also", Text: question})
 }
 
+// Pause holds every running agent at its next step and holds the queue.
+// Steps already under way finish first.
 func (a *App) Pause() (nullbot.Reply, error) {
-	a.bot.RequestPause()
-	reply := a.bot.State()
-	reply.Command = "/pause"
-	reply.Message = "Pause requested. Queued messages are held until Resume."
-	reply.Activity = nil
-	a.emit("reply", reply)
-	return reply, nil
+	a.bot.PauseRuns()
+	return a.runReply("Pausing. Steps already under way finish, then everything waits until you resume.")
 }
 
+// Resume lets paused agents carry on and starts held requests.
 func (a *App) Resume() (nullbot.Reply, error) {
-	a.bot.Resume()
+	a.bot.ResumeRuns()
+	return a.runReply("Resumed.")
+}
+
+// StopRun asks the running request to wrap up: no new tool calls, and an
+// answer saying what was done and what is left. Queued requests continue.
+func (a *App) StopRun() (nullbot.Reply, error) {
+	if err := a.bot.StopCurrent(); err != nil {
+		return nullbot.Reply{}, err
+	}
+	return a.runReply("Stopping. The current step finishes, then the request wraps up.")
+}
+
+// StopEverything cancels all running work now and holds queued requests.
+func (a *App) StopEverything() (nullbot.Reply, error) {
+	a.bot.StopEverything()
+	return a.runReply("Stopped everything. Queued requests wait until you resume.")
+}
+
+// SteerSubagent sends guidance to one running subagent.
+func (a *App) SteerSubagent(taskID, text string) error {
+	return a.bot.SteerTask(taskID, text)
+}
+
+func (a *App) runReply(message string) (nullbot.Reply, error) {
 	reply := a.bot.State()
-	reply.Message = "Resumed. The next active run will proceed normally."
+	reply.Message = message
+	reply.Activity = nil
 	a.emit("reply", reply)
 	return reply, nil
 }

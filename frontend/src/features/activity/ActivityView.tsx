@@ -13,6 +13,7 @@ import {Blank, DetailHeader, Facts, ListGroup, ListRow, Panes, Section, Spinner,
 import {Markdown} from '../../ui/Markdown';
 import {confirmDialog, promptDialog} from '../../ui/dialogs';
 import {toast, toastError} from '../../ui/toast';
+import {steerSubagent} from '../../state/chat';
 
 export function ActivityView() {
   const tab = useStore(appStore, state => state.activityTab);
@@ -77,6 +78,34 @@ function RunsTab() {
   );
 }
 
+/** Guidance for one subagent; Steer in the chat reaches all of them. */
+function SteerSubagent({taskID, name}: {taskID: string; name: string}) {
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  async function send() {
+    if (!text.trim()) return;
+    setSending(true);
+    if (await steerSubagent(taskID, text.trim())) setText('');
+    setSending(false);
+  }
+  return (
+    <Section title={`Steer ${name}`}>
+      <div className="steer-one">
+        <textarea className="textarea" rows={2} value={text} placeholder="Guidance for this subagent only. It arrives at its next step." aria-label={`Guidance for ${name}`}
+          onChange={event => setText(event.target.value)}
+          onKeyDown={event => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault();
+              void send();
+            }
+          }} />
+        <button className="btn" disabled={!text.trim() || sending} onClick={() => void send()}>Send guidance</button>
+      </div>
+      <p className="faint">To guide the manager and every subagent at once, use Steer in the chat.</p>
+    </Section>
+  );
+}
+
 function RunDetail({task, now, onTasks}: {task: AgentTask; now: number; onTasks: (tasks: AgentTask[]) => void}) {
   const [stopping, setStopping] = useState(false);
   const live = isLive(task);
@@ -118,6 +147,7 @@ function RunDetail({task, now, onTasks}: {task: AgentTask; now: number; onTasks:
         {live && task.current && (
           <p className="working-line"><span className="dot live" />{task.current}</p>
         )}
+        {live && task.role === 'subagent' && <SteerSubagent taskID={task.id} name={task.name || 'this subagent'} />}
         {task.error && <div className="notice bad"><div><strong>The run failed.</strong> {task.error}</div></div>}
         {task.prompt && (
           <Section title="Asked to">

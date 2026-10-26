@@ -4,7 +4,7 @@ import {api} from '../../lib/bindings';
 import {guard, useUnsavedEdits} from '../../lib/dirty';
 import {appStore, accents, applyAppearance, applyUIState, refreshState, type SettingsSection} from '../../state/app';
 import ProjectsView from '../../ProjectsView';
-import ModelsView from '../../ModelsView';
+import {ModelsSettings} from './ModelsSettings';
 import {AccountsSettings} from './AccountsSettings';
 import {AgentSettings} from './AgentSettings';
 import {UsageSettings} from './UsageSettings';
@@ -65,12 +65,6 @@ function ProjectsSettings() {
       confirm={(title, body) => confirmDialog({title, body, confirmLabel: 'Allow', danger: true})}
     />
   );
-}
-
-function ModelsSettings() {
-  const ui = useStore(appStore, state => state.ui);
-  if (!ui) return null;
-  return <ModelsView ui={ui} refreshState={refreshState} />;
 }
 
 // ----------------------------------------------------------------- prompts

@@ -17,7 +17,7 @@ export default function BusySendDialog({onChoose, onCancel}: {onChoose: (mode: C
     <p id="busy-send-description" className="muted">Choose what to do with this message. Your draft, attachments and skills stay as they are until you pick.</p>
     <div className="choice-list">
       <button className="choice" onClick={() => onChoose('queue')}><strong>Queue it</strong><span className="muted">Runs after the current request finishes.</span></button>
-      <button className="choice" onClick={() => onChoose('steer')}><strong>Steer the current request</strong><span className="muted">Adds this as guidance to the work already running.</span></button>
+      <button className="choice" onClick={() => onChoose('steer')}><strong>Steer the current request</strong><span className="muted">Adds this as guidance for the manager and every subagent it has running, at their next step.</span></button>
       <button className="choice" onClick={() => onChoose('also')}><strong>Ask on the side</strong><span className="muted">Gets a separate answer without interrupting anything.</span></button>
     </div>
     <div className="modal-actions">

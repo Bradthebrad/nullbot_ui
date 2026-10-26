@@ -3,7 +3,7 @@ import {Search} from 'lucide-react';
 import {useStore} from '../lib/store';
 import {api} from '../lib/bindings';
 import {appStore, applyAppearance, applyUIState, openSettings, setView, toggleInspector, type SettingsSection} from '../state/app';
-import {analyzeWorkspace, chatStore, clearConversation, compactConversation, createPlan, isBusy, resumeRuns, stopRun} from '../state/chat';
+import {analyzeWorkspace, chatStore, clearConversation, compactConversation, createPlan, pauseRuns, resumeRuns, runPhase, stopEverything, stopRun} from '../state/chat';
 import {confirmDialog, promptDialog} from '../ui/dialogs';
 import {toast, toastError} from '../ui/toast';
 
@@ -12,8 +12,7 @@ type Command = {id: string; title: string; group: string; keywords?: string; hin
 function useCommands(): Command[] {
   const projects = useStore(appStore, state => state.projects);
   const mcp = useStore(appStore, state => state.mcp);
-  const busy = useStore(chatStore, isBusy);
-  const paused = useStore(chatStore, state => !!state.submissions.paused);
+  const phase = useStore(chatStore, runPhase);
   const config = useStore(appStore, state => state.config);
   return useMemo(() => {
     const go = (view: Parameters<typeof setView>[0]) => () => setView(view);
@@ -72,8 +71,10 @@ function useCommands(): Command[] {
         },
       })),
     ];
-    if (busy) list.unshift({id: 'stop', group: 'Run', title: 'Stop the current request', run: () => stopRun()});
-    if (paused) list.unshift({id: 'resume', group: 'Run', title: 'Resume queued requests', run: () => resumeRuns()});
+    if (phase === 'working' || phase === 'paused' || phase === 'stopping') list.unshift({id: 'stop-all', group: 'Run', title: 'Stop everything now', keywords: 'cancel emergency halt kill', run: () => stopEverything()});
+    if (phase === 'working' || phase === 'paused') list.unshift({id: 'stop', group: 'Run', title: 'Stop after this step', keywords: 'wrap up end', run: () => stopRun()});
+    if (phase === 'working') list.unshift({id: 'pause', group: 'Run', title: 'Pause the current request', run: () => pauseRuns()});
+    if (phase === 'paused' || phase === 'held') list.unshift({id: 'resume', group: 'Run', title: phase === 'held' ? 'Resume queued requests' : 'Resume the paused request', run: () => resumeRuns()});
     for (const project of projects?.projects || []) {
       if (project.id === projects?.primary_project_id) continue;
       list.push({id: `primary-${project.id}`, group: 'Projects', title: `Work in ${project.name}`, keywords: project.path, run: async () => {
@@ -97,7 +98,7 @@ function useCommands(): Command[] {
       }});
     }
     return list;
-  }, [projects, mcp, busy, paused, config]);
+  }, [projects, mcp, phase, config]);
 }
 
 function score(command: Command, query: string): number {

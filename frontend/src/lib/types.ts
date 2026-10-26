@@ -197,7 +197,8 @@ export type MarketPackage = {id: string; name: string; description?: string; kin
 export type MarketState = {packages: MarketPackage[]; local_servers?: {id: string; name: string; path: string; description: string}[]; dir?: string; error?: string};
 
 export type SubmissionJob = {id: string; request_id?: string; mode: string; input?: string; status: string; error?: string; reply?: {message?: string; data?: any}};
-export type SubmissionSnapshot = {paused?: boolean; busy: boolean; primary_id?: string; queue: SubmissionJob[]; jobs: SubmissionJob[]};
+/** paused: queued requests are held. run_paused: running agents wait at their next step. stopping: the running request is wrapping up. */
+export type SubmissionSnapshot = {paused?: boolean; run_paused?: boolean; stopping?: boolean; busy: boolean; primary_id?: string; queue: SubmissionJob[]; jobs: SubmissionJob[]};
 
 export type Reply = {
   message?: string;

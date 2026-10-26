@@ -1,8 +1,8 @@
 import {useEffect, useMemo, useRef, useState} from 'react';
-import {ChevronDown, CornerDownLeft, Layers, Paperclip, Square, X} from 'lucide-react';
+import {ChevronDown, CornerDownLeft, Layers, Paperclip, Play, Square, X} from 'lucide-react';
 import {useStore} from '../../lib/store';
 import {api} from '../../lib/bindings';
-import {chatStore, isBusy, sendChat, stopRun} from '../../state/chat';
+import {chatStore, isBusy, resumeRuns, runPhase, sendChat, stopRun} from '../../state/chat';
 import {appStore} from '../../state/app';
 import {useComposerDraft} from '../../useComposerDraft';
 import {useAttachments} from '../../useAttachments';
@@ -32,6 +32,7 @@ export function Composer({active}: {active: boolean}) {
   const {input, setInput, undo, redo} = useComposerDraft();
   const {attachments, queue} = useAttachments();
   const busy = useStore(chatStore, isBusy);
+  const phase = useStore(chatStore, runPhase);
   const sending = useStore(chatStore, state => state.sending);
   const submissions = useStore(chatStore, state => state.submissions);
   const commands = useStore(chatStore, state => state.commands);
@@ -345,8 +346,10 @@ export function Composer({active}: {active: boolean}) {
           <button className="btn btn-ghost" disabled={!canSend} title="Ask without interrupting the main conversation" onClick={() => void send('also')}>
             <Layers size={15} />Ask on the side
           </button>
-          {busy && !input.trim() && !attachments.length ? (
-            <button className="btn btn-primary" onClick={() => void stopRun()}><Square size={13} />Stop</button>
+          {busy && !input.trim() && !attachments.length && phase === 'paused' ? (
+            <button className="btn btn-primary" onClick={() => void resumeRuns()}><Play size={13} />Resume</button>
+          ) : busy && !input.trim() && !attachments.length && phase !== 'held' ? (
+            <button className="btn btn-primary" disabled={phase === 'stopping'} title="Finish the current step, then wrap up with what was done" onClick={() => void stopRun()}><Square size={13} />{phase === 'stopping' ? 'Stopping' : 'Stop'}</button>
           ) : busy ? (
             <div className="split">
               <button className="btn btn-primary" disabled={!canSend} onClick={() => void send('queue')}>Queue</button>
@@ -359,7 +362,7 @@ export function Composer({active}: {active: boolean}) {
                 disabled={!canSend}
                 items={[
                   {label: 'Queue after the current request', onSelect: () => void send('queue')},
-                  {label: 'Steer the current request', hint: 'Adds guidance now', onSelect: () => void send('steer')},
+                  {label: 'Steer the current request', hint: 'Manager and subagents', disabled: phase === 'stopping', onSelect: () => void send('steer')},
                   {label: 'Ask on the side', onSelect: () => void send('also')},
                 ]}
               />

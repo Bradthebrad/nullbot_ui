@@ -325,6 +325,19 @@ export function applyActivity(state: ActivityState, records: ActivityRecord[]): 
         addStep(turn, {key: `note:${seq}`, kind: 'note', state: status === 'instruction applied' ? 'done' : 'error', seq, agent, text: status === 'instruction applied' ? `Guidance delivered: ${record.detail || ''}` : `Guidance was not delivered: ${record.detail || ''}`, startedAt: record.time});
         break;
       }
+      case 'runs paused':
+      case 'runs resumed':
+      case 'stop requested':
+      case 'stopped everything': {
+        if (!record.submission_id) break;
+        const turn = turnFor(record, true)!;
+        const text = status === 'runs paused' ? 'Paused. Steps already under way finish; nothing new starts until you resume.'
+          : status === 'runs resumed' ? 'Resumed.'
+            : status === 'stop requested' ? 'Stop requested: finishing the current step, then wrapping up.'
+              : 'Stopped everything, including tool calls in flight.';
+        addStep(turn, {key: `note:${seq}`, kind: status === 'stopped everything' ? 'error' : 'note', state: status === 'stopped everything' ? 'error' : 'done', seq, agent, text, startedAt: record.time, endedAt: record.time});
+        break;
+      }
       case 'context shortened':
       case 'context compact complete': {
         const turn = turnFor(record, true)!;
