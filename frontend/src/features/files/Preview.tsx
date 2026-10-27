@@ -59,8 +59,8 @@ export function PreviewPane({preview, writable, onSaved}: {preview: FilePreview;
           {modes && !editing && (
             <Segmented label="View" value={mode} onChange={setMode} options={[{id: 'rendered', label: modes.rendered}, {id: 'source', label: preview.kind === 'json' ? 'As saved' : 'Source'}]} />
           )}
-          {preview.editable && !editing && (
-            <button className="btn" disabled={!writable || preview.truncated} title={!writable ? 'This project doesn’t allow editing files' : preview.truncated ? 'Too large to edit here' : 'Edit'} onClick={() => {
+          {(preview.editable || preview.read_only_reason) && !editing && (
+            <button className="btn" disabled={!writable || !preview.editable} title={preview.read_only_reason || (!writable ? 'This project doesn’t allow editing files' : 'Edit')} onClick={() => {
               setDraft(preview.content || '');
               setEditing(true);
             }}><Pencil size={13} />Edit</button>

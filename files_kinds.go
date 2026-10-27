@@ -16,9 +16,35 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 	"unicode/utf16"
 	"unicode/utf8"
 )
+
+// Previews read untrusted files, so every reader is bounded: what it may
+// decompress, how much text it keeps, and how long it may take.
+const (
+	maxZipEntryBytes  = 32 << 20 // decompressed bytes read from one zip entry
+	maxExtractedText  = 400_000  // characters of text kept from a document
+	maxArchiveScan    = 256 << 20
+	maxArchiveTime    = 3 * time.Second
+	maxRenderedHTML   = 5 << 20
+	maxFormattedJSON  = 512 << 10
+	maxJSONDepthShown = 40
+)
+
+// openZipEntry opens a zip entry for reading at most maxZipEntryBytes, so a
+// small file can't expand into gigabytes.
+func openZipEntry(file *zip.File) (io.ReadCloser, error) {
+	rc, err := file.Open()
+	if err != nil {
+		return nil, err
+	}
+	return struct {
+		io.Reader
+		io.Closer
+	}{io.LimitReader(rc, maxZipEntryBytes), rc}, nil
+}
 
 // File kinds decide the icon in the list and how a file previews.
 //
@@ -167,19 +193,17 @@ func (a *App) previewFile(path string) (FilePreview, error) {
 	case "html":
 		a.textPreview(&preview, path)
 		// The rendered view loads only the file itself: the server's policy
-		// blocks scripts and anything from the network.
-		preview.URL = a.registerLocal(path, "text/html; charset=utf-8")
+		// blocks scripts and anything from the network. Very large pages
+		// show as source only.
+		if info.Size() <= maxRenderedHTML {
+			preview.URL = a.registerLocal(path, "text/html; charset=utf-8")
+		}
 	case "csv":
 		a.textPreview(&preview, path)
 		preview.Headers, preview.Rows = parseDelimitedRows(preview.Content, path)
 	case "json":
 		a.textPreview(&preview, path)
-		var value any
-		if preview.Content != "" && !preview.Truncated && json.Unmarshal([]byte(preview.Content), &value) == nil {
-			if pretty, err := json.MarshalIndent(value, "", "  "); err == nil && string(pretty) != preview.Content {
-				preview.Formatted = string(pretty)
-			}
-		}
+		preview.Formatted = formatJSON(preview.Content, preview.Truncated)
 	case "markdown", "text", "code", "data":
 		a.textPreview(&preview, path)
 	case "xlsx":
@@ -228,6 +252,43 @@ func (a *App) previewFile(path string) (FilePreview, error) {
 	return preview, nil
 }
 
+// formatJSON indents JSON for reading, keeping key order. Large or deeply
+// nested documents are left as they are: indentation multiplies their size.
+func formatJSON(content string, truncated bool) string {
+	if content == "" || truncated || len(content) > maxFormattedJSON || jsonDepth(content) > maxJSONDepthShown {
+		return ""
+	}
+	var out bytes.Buffer
+	if err := json.Indent(&out, []byte(content), "", "  "); err != nil || out.Len() > 4*maxFormattedJSON || out.String() == content {
+		return ""
+	}
+	return out.String()
+}
+
+func jsonDepth(content string) int {
+	depth, deepest, inString, escaped := 0, 0, false, false
+	for i := 0; i < len(content); i++ {
+		c := content[i]
+		switch {
+		case escaped:
+			escaped = false
+		case inString && c == '\\':
+			escaped = true
+		case c == '"':
+			inString = !inString
+		case inString:
+		case c == '{' || c == '[':
+			depth++
+			if depth > deepest {
+				deepest = depth
+			}
+		case c == '}' || c == ']':
+			depth--
+		}
+	}
+	return deepest
+}
+
 func (a *App) registerLocal(path, mimeType string) string {
 	if a.localFiles == nil {
 		a.localFiles = newLocalFiles()
@@ -236,15 +297,21 @@ func (a *App) registerLocal(path, mimeType string) string {
 }
 
 func (a *App) textPreview(preview *FilePreview, path string) {
-	content, truncated, err := readTextPreview(path)
+	content, truncated, encoding, err := readTextFile(path)
 	if err != nil {
 		preview.Error = err.Error()
 		preview.Editable = false
 		return
 	}
-	preview.Content, preview.Truncated = content, truncated
-	if truncated {
+	preview.Content, preview.Truncated, preview.Encoding = content, truncated, encoding
+	switch {
+	case truncated:
 		preview.Editable = false
+		preview.ReadOnlyReason = "Too large to edit here"
+	case encoding == "windows-1252":
+		// Saving would have to change its encoding; leave that to its app.
+		preview.Editable = false
+		preview.ReadOnlyReason = "Stored as Windows-1252 text; edit it in another app to keep that encoding"
 	}
 }
 
@@ -252,41 +319,72 @@ func (a *App) textPreview(preview *FilePreview, path string) {
 // UTF-8 (with or without a byte order mark) and UTF-16, which Windows tools
 // often write; anything else is read as Windows-1252.
 func readTextPreview(path string) (string, bool, error) {
+	content, truncated, _, err := readTextFile(path)
+	return content, truncated, err
+}
+
+// readTextFile is readTextPreview that also reports the encoding.
+func readTextFile(path string) (string, bool, string, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return "", false, err
+		return "", false, "", err
 	}
 	defer file.Close()
 	var buf bytes.Buffer
 	n, err := io.CopyN(&buf, file, maxPreviewBytes+1)
 	if err != nil && err != io.EOF {
-		return "", false, err
+		return "", false, "", err
 	}
 	data := buf.Bytes()
 	truncated := n > maxPreviewBytes
 	if truncated {
 		data = data[:maxPreviewBytes]
 	}
-	return decodeText(data), truncated, nil
+	text, encoding := decodeText(data, truncated)
+	return text, truncated, encoding, nil
 }
 
-func decodeText(data []byte) string {
+// decodeText reads data as text. cut says data stops partway through the
+// file, so a multi-byte character may be split at its end.
+func decodeText(data []byte, cut bool) (string, string) {
 	switch {
 	case bytes.HasPrefix(data, []byte{0xEF, 0xBB, 0xBF}):
-		return strings.ToValidUTF8(string(data[3:]), "�")
+		return strings.ToValidUTF8(string(data[3:]), "�"), "utf-8-bom"
 	case bytes.HasPrefix(data, []byte{0xFF, 0xFE}):
-		return decodeUTF16(data[2:], binary.LittleEndian)
+		return decodeUTF16(data[2:], binary.LittleEndian), "utf-16le"
 	case bytes.HasPrefix(data, []byte{0xFE, 0xFF}):
-		return decodeUTF16(data[2:], binary.BigEndian)
+		return decodeUTF16(data[2:], binary.BigEndian), "utf-16be"
 	}
 	if utf8.Valid(data) {
-		return string(data)
+		return string(data), "utf-8"
 	}
-	// A truncated multi-byte character at the end is still UTF-8.
-	if cut := lastValidUTF8(data); len(data)-cut < utf8.UTFMax && utf8.Valid(data[:cut]) {
-		return string(data[:cut])
+	// A character split by the cut is still UTF-8.
+	if end := lastValidUTF8(data); cut && len(data)-end < utf8.UTFMax && utf8.Valid(data[:end]) {
+		return string(data[:end]), "utf-8"
 	}
-	return decodeWindows1252(data)
+	return decodeWindows1252(data), "windows-1252"
+}
+
+// encodeText stores edited text the way the file was stored.
+func encodeText(content, encoding string) ([]byte, error) {
+	switch encoding {
+	case "", "utf-8":
+		return []byte(content), nil
+	case "utf-8-bom":
+		return append([]byte{0xEF, 0xBB, 0xBF}, content...), nil
+	case "utf-16le", "utf-16be":
+		var order binary.AppendByteOrder = binary.LittleEndian
+		out := []byte{0xFF, 0xFE}
+		if encoding == "utf-16be" {
+			order, out = binary.BigEndian, []byte{0xFE, 0xFF}
+		}
+		for _, unit := range utf16.Encode([]rune(content)) {
+			out = order.AppendUint16(out, unit)
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("this file is stored as %s, which the built-in editor can't write", encoding)
+	}
 }
 
 func lastValidUTF8(data []byte) int {
@@ -434,7 +532,8 @@ func listArchive(path string) ([]ArchiveEntry, int, error) {
 			return nil, 0, err
 		}
 		defer gz.Close()
-		return listTar(gz)
+		// Listing a compressed tar means reading through it: bounded.
+		return listTar(io.LimitReader(gz, maxArchiveScan))
 	case strings.HasSuffix(lower, ".gz"):
 		file, err := os.Open(path)
 		if err != nil {
@@ -445,12 +544,20 @@ func listArchive(path string) ([]ArchiveEntry, int, error) {
 		if err != nil {
 			return nil, 0, err
 		}
-		defer gz.Close()
 		name := gz.Name
+		gz.Close()
 		if name == "" {
 			name = strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
 		}
-		size, _ := io.Copy(io.Discard, io.LimitReader(gz, 1<<30))
+		// The unpacked size (modulo 4 GiB) is in the last four bytes; nothing
+		// needs decompressing.
+		var size int64
+		if info, err := file.Stat(); err == nil && info.Size() >= 4 {
+			trailer := make([]byte, 4)
+			if _, err := file.ReadAt(trailer, info.Size()-4); err == nil {
+				size = int64(binary.LittleEndian.Uint32(trailer))
+			}
+		}
 		return []ArchiveEntry{{Name: name, Size: size}}, 1, nil
 	}
 	zr, err := zip.OpenReader(path)
@@ -473,7 +580,8 @@ func listTar(r io.Reader) ([]ArchiveEntry, int, error) {
 	tr := tar.NewReader(r)
 	var out []ArchiveEntry
 	total := 0
-	for {
+	deadline := time.Now().Add(maxArchiveTime)
+	for time.Now().Before(deadline) && total < 50_000 {
 		header, err := tr.Next()
 		if err == io.EOF {
 			break
@@ -498,11 +606,17 @@ func extractDocumentText(path, kind string) (string, error) {
 	case "docx":
 		return extractDocxText(path)
 	case "rtf":
-		data, err := os.ReadFile(path)
+		file, err := os.Open(path)
 		if err != nil {
 			return "", err
 		}
-		return rtfText(string(data)), nil
+		defer file.Close()
+		// Text sits near the start; pictures and fonts make up the bulk.
+		data, err := io.ReadAll(io.LimitReader(file, 8<<20))
+		if err != nil {
+			return "", err
+		}
+		return truncateRunes(rtfText(string(data)), maxExtractedText), nil
 	}
 	zr, err := zip.OpenReader(path)
 	if err != nil {
@@ -520,6 +634,9 @@ func extractDocumentText(path, kind string) (string, error) {
 		sort.Slice(slides, func(i, j int) bool { return slideNumber(slides[i].Name) < slideNumber(slides[j].Name) })
 		var b strings.Builder
 		for i, slide := range slides {
+			if b.Len() > maxExtractedText || i >= 500 {
+				break
+			}
 			text, err := xmlText(slide, map[string]bool{"t": true}, map[string]bool{"p": true})
 			if err != nil {
 				continue
@@ -550,7 +667,7 @@ func slideNumber(name string) int {
 // xmlText collects character data. With textElements set, only text inside
 // those elements counts; breaks end each listed block element.
 func xmlText(file *zip.File, textElements, breaks map[string]bool) (string, error) {
-	rc, err := file.Open()
+	rc, err := openZipEntry(file)
 	if err != nil {
 		return "", err
 	}
@@ -558,7 +675,7 @@ func xmlText(file *zip.File, textElements, breaks map[string]bool) (string, erro
 	decoder := xml.NewDecoder(rc)
 	var b strings.Builder
 	depth := 0
-	for {
+	for b.Len() < maxExtractedText {
 		tok, err := decoder.Token()
 		if err != nil {
 			break
@@ -603,7 +720,7 @@ func parseODSPreview(path string) ([]string, [][]string, error) {
 	if file == nil {
 		return nil, nil, fmt.Errorf("content.xml not found")
 	}
-	rc, err := file.Open()
+	rc, err := openZipEntry(file)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -651,8 +768,8 @@ func parseODSPreview(path string) ([]string, [][]string, error) {
 					}
 				}
 			case "table-cell", "covered-table-cell":
-				for i := 0; i < repeat && i < 64; i++ {
-					row = append(row, strings.TrimSpace(cell.String()))
+				for i := 0; i < repeat && i < 64 && len(row) < 200; i++ {
+					row = append(row, truncateRunes(strings.TrimSpace(cell.String()), 2000))
 				}
 				inCell = false
 			case "p":
@@ -661,7 +778,7 @@ func parseODSPreview(path string) ([]string, [][]string, error) {
 				}
 			}
 		case xml.CharData:
-			if inCell {
+			if inCell && cell.Len() < 8000 {
 				cell.Write(t)
 			}
 		}

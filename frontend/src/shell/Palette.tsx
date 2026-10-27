@@ -13,6 +13,7 @@ function useCommands(): Command[] {
   const projects = useStore(appStore, state => state.projects);
   const mcp = useStore(appStore, state => state.mcp);
   const phase = useStore(chatStore, runPhase);
+  const queued = useStore(chatStore, state => state.submissions.queue?.length || 0);
   const config = useStore(appStore, state => state.config);
   return useMemo(() => {
     const go = (view: Parameters<typeof setView>[0]) => () => setView(view);
@@ -74,7 +75,7 @@ function useCommands(): Command[] {
     if (phase === 'working' || phase === 'paused' || phase === 'stopping') list.unshift({id: 'stop-all', group: 'Run', title: 'Stop everything now', keywords: 'cancel emergency halt kill', run: () => stopEverything()});
     if (phase === 'working' || phase === 'paused') list.unshift({id: 'stop', group: 'Run', title: 'Stop after this step', keywords: 'wrap up end', run: () => stopRun()});
     if (phase === 'working') list.unshift({id: 'pause', group: 'Run', title: 'Pause the current request', run: () => pauseRuns()});
-    if (phase === 'paused' || phase === 'held') list.unshift({id: 'resume', group: 'Run', title: phase === 'held' ? 'Resume queued requests' : 'Resume the paused request', run: () => resumeRuns()});
+    if (phase === 'paused' || phase === 'held') list.unshift({id: 'resume', group: 'Run', title: phase === 'held' ? (queued ? 'Resume queued requests' : 'Resume') : 'Resume the paused request', run: () => resumeRuns()});
     for (const project of projects?.projects || []) {
       if (project.id === projects?.primary_project_id) continue;
       list.push({id: `primary-${project.id}`, group: 'Projects', title: `Work in ${project.name}`, keywords: project.path, run: async () => {
@@ -98,7 +99,7 @@ function useCommands(): Command[] {
       }});
     }
     return list;
-  }, [projects, mcp, phase, config]);
+  }, [projects, mcp, phase, queued, config]);
 }
 
 function score(command: Command, query: string): number {

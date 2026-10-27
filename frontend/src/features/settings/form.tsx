@@ -22,6 +22,31 @@ export function setPath(obj: any, path: string, value: unknown) {
 }
 
 /**
+ * A value as the config stores it: empty strings, zeros, false and empty
+ * lists or maps are the same as unset (the app leaves them out when it
+ * saves), and keys are sorted. Clearing a field you never filled in is not an
+ * unsaved change.
+ */
+export function canonical(value: unknown): unknown {
+  if (value == null || value === '' || value === 0 || value === false) return undefined;
+  if (Array.isArray(value)) {
+    const items = value.map(item => canonical(item) ?? null);
+    return items.length ? items : undefined;
+  }
+  if (typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(value as object).sort()) {
+      const item = canonical((value as Record<string, unknown>)[key]);
+      if (item !== undefined) out[key] = item;
+    }
+    return Object.keys(out).length ? out : undefined;
+  }
+  return value;
+}
+
+const snapshot = (source: unknown, paths: string[]) => JSON.stringify(paths.map(path => canonical(getPath(source, path)) ?? null));
+
+/**
  * A draft of the config paths a page owns. Saving copies only those paths
  * onto the latest config, so edits made on other pages are never undone.
  */
@@ -29,8 +54,8 @@ export function useConfigDraft(key: string, managed: string[]) {
   const config = useStore(appStore, state => state.config);
   const [draft, setDraft] = useState<any>(() => structuredClone(config || {}));
   const [saving, setSaving] = useState(false);
-  const baseline = useMemo(() => JSON.stringify(managed.map(path => getPath(config, path) ?? null)), [config]);
-  const dirty = baseline !== JSON.stringify(managed.map(path => getPath(draft, path) ?? null));
+  const baseline = useMemo(() => snapshot(config, managed), [config]);
+  const dirty = baseline !== snapshot(draft, managed);
   useUnsavedEdits(key, dirty);
 
   // Pick up outside changes when there are no local edits.

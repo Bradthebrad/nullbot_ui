@@ -42,6 +42,14 @@ var revealOnlyExtensions = map[string]bool{
 	".js": true, ".jse": true, ".wsf": true, ".wsh": true, ".msi": true, ".msp": true, ".scr": true, ".lnk": true,
 	".jar": true, ".hta": true, ".reg": true, ".cpl": true, ".msc": true, ".pif": true, ".application": true,
 	".appref-ms": true, ".sh": true, ".command": true, ".app": true, ".url": true, ".inf": true, ".dll": true,
+	".py": true, ".pyw": true, ".pyz": true, ".pyc": true, ".rdp": true, ".scf": true, ".library-ms": true, ".search-ms": true,
+	".searchconnector-ms": true, ".settingcontent-ms": true, ".xll": true, ".terminal": true, ".fileloc": true, ".website": true,
+	".gadget": true, ".ws": true, ".wsc": true, ".sct": true, ".shb": true, ".shs": true, ".mst": true, ".msix": true, ".msixbundle": true,
+	".appx": true, ".appxbundle": true, ".appinstaller": true, ".xbap": true, ".chm": true, ".iqy": true, ".slk": true, ".jnlp": true,
+	".action": true, ".workflow": true, ".tool": true, ".pkg": true, ".mpkg": true, ".dmg": true, ".ps1xml": true, ".psc1": true,
+	".psd1": true, ".vb": true, ".vbscript": true, ".mde": true, ".ade": true, ".adp": true, ".accde": true, ".diagcab": true,
+	".application-ms": true, ".hlp": true, ".ins": true, ".isp": true, ".job": true, ".mau": true, ".prg": true, ".scpt": true,
+	".scptd": true, ".applescript": true, ".deb": true, ".rpm": true, ".run": true, ".desktop": true, ".appimage": true,
 }
 
 // OpenPath opens a file inside a configured project with its default app.
@@ -51,11 +59,11 @@ func (a *App) OpenPath(path string) error {
 	if err != nil {
 		return err
 	}
-	info, err := os.Stat(resolved)
-	if err != nil {
+	if _, err := os.Stat(resolved); err != nil {
 		return err
 	}
-	if !info.IsDir() && revealOnlyExtensions[strings.ToLower(filepath.Ext(resolved))] {
+	// Folders count too: a macOS .app is a folder that launches.
+	if revealOnlyExtensions[strings.ToLower(filepath.Ext(resolved))] {
 		return revealInFileManager(resolved)
 	}
 	return openWithSystem(resolved)

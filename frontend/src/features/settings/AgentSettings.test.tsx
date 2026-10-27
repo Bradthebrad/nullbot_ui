@@ -5,6 +5,7 @@ import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {installBridge, type FakeBridge} from '../../test/bridge';
 import {ModelsSettings} from './ModelsSettings';
 import {AgentSettings} from './AgentSettings';
+import {canonical} from './form';
 import {appStore} from '../../state/app';
 
 let bridge: FakeBridge;
@@ -38,5 +39,24 @@ describe('Model settings: context window', () => {
     render(<AgentSettings />);
     fireEvent.click(screen.getByRole('checkbox', {name: 'Shorten and summarize automatically'}));
     expect(screen.getByText(/nothing is shortened or summarized/)).toBeTruthy();
+  });
+});
+
+describe('Unsaved changes', () => {
+  it('treats empty and unset values alike', () => {
+    expect(canonical({a: '', b: 0, c: [], d: {}, e: false, f: null})).toBeUndefined();
+    expect(canonical({b: 2, a: {y: '', x: 1}})).toEqual({a: {x: 1}, b: 2});
+    expect(JSON.stringify(canonical({b: 1, a: 2}))).toBe(JSON.stringify(canonical({a: 2, b: 1})));
+  });
+
+  it('does not count clearing an untouched field as a change', async () => {
+    render(<ModelsSettings />);
+    const save = (await screen.findByRole('button', {name: 'Save settings'})) as HTMLButtonElement;
+    const field = (await screen.findAllByRole('spinbutton', {name: /Context window/}))[0] as HTMLInputElement;
+    fireEvent.change(field, {target: {value: '5000'}});
+    expect(save.disabled).toBe(false);
+    fireEvent.change(field, {target: {value: ''}});
+    await waitFor(() => expect(save.disabled).toBe(true));
+    expect(screen.getByText('Settings are up to date.')).toBeTruthy();
   });
 });

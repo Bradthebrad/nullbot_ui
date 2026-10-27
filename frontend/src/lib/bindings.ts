@@ -19,7 +19,7 @@ export const api = {
   submit: (input: string) => call<Reply>('Submit', input),
   pause: () => call<Reply>('Pause'),
   resume: () => call<Reply>('Resume'),
-  stopRun: () => call<Reply>('StopRun'),
+  stopRun: (targetID = '') => call<Reply>('StopRun', targetID),
   stopEverything: () => call<Reply>('StopEverything'),
   steerSubagent: (taskID: string, text: string) => call<void>('SteerSubagent', taskID, text),
   analyze: (focus: string) => call<Reply>('Analyze', focus),

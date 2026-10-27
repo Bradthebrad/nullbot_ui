@@ -185,7 +185,10 @@ export function FilesView() {
   // When a run finishes, the bot may have changed files here.
   const wasBusy = useRef(busy);
   useEffect(() => {
-    if (wasBusy.current && !busy && current) void load(current, {keepSearch: true, history: 'none'});
+    if (wasBusy.current && !busy && current) {
+      void load(current, {keepSearch: true, history: 'none'});
+      if (treeSearch) void refreshSearch();
+    }
     wasBusy.current = busy;
   }, [busy]);
 
@@ -273,6 +276,7 @@ export function FilesView() {
         ++listSeq.current;
         setBrowser(next);
       }
+      if (treeSearch) void refreshSearch();
       if (type === 'file') open(joinPath(dir, name));
       toast(`Created ${name}.`);
     } catch (err) {
@@ -345,10 +349,12 @@ export function FilesView() {
         setBrowser(next);
       }
       if (move) fileClipboard.set({paths: [], move: false});
+      if (treeSearch) void refreshSearch();
       toast(`${move ? 'Moved' : 'Pasted'} ${paths.length === 1 ? '1 item' : `${paths.length} items`}.`);
     } catch (err) {
       toastError(err);
       void refresh();
+      if (treeSearch) void refreshSearch();
     }
   }
 
@@ -359,6 +365,7 @@ export function FilesView() {
         ++listSeq.current;
         setBrowser(next);
       }
+      if (treeSearch) void refreshSearch();
       toast(`Duplicated ${entry.name}.`);
     } catch (err) {
       toastError(err);
@@ -448,10 +455,10 @@ export function FilesView() {
       pathEdit.current();
       return;
     }
+    if (typing) return;
     if (event.altKey && event.key === 'ArrowLeft') return goBack();
     if (event.altKey && event.key === 'ArrowRight') return goForward();
     if (event.altKey && event.key === 'ArrowUp') return void goUp();
-    if (typing) return;
     if (mod && event.key.toLowerCase() === 'a') {
       event.preventDefault();
       setSelected(entries.map(entry => entry.path));

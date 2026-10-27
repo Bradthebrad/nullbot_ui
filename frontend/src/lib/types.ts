@@ -183,6 +183,10 @@ export type FilePreview = {
   entries?: ArchiveEntry[]; count?: number;
   /** The start of a binary file, as a hex dump. */
   hex?: string;
+  /** How a text file is stored: utf-8, utf-8-bom, utf-16le, utf-16be or windows-1252. Saving keeps it. */
+  encoding?: string;
+  /** Why a text file can't be edited here, when it can't. */
+  read_only_reason?: string;
 };
 export type FileSearchKind = '' | 'folder' | 'document' | 'code' | 'image' | 'sheet' | 'media' | 'archive';
 export type FileSearchResult = {root: string; entries: FileEntry[]; scanned: number; truncated: boolean; skipped?: string[]};

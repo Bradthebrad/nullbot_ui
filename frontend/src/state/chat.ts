@@ -297,7 +297,9 @@ export function runPhase(state: ChatState): RunPhase {
   if (running && s.stopping) return 'stopping';
   if (running && s.run_paused) return 'paused';
   if (running) return 'working';
-  if (s.paused && s.queue?.length) return 'held';
+  // Held with nothing running: queued requests wait, or a pause is still in
+  // place while the last subagents finish. Either way Resume is the way out.
+  if (s.paused || s.run_paused) return 'held';
   return 'idle';
 }
 
@@ -323,7 +325,9 @@ export async function resumeRuns() {
 
 /** The request wraps up: no new tool calls, then a summary of what was done. */
 export async function stopRun() {
-  if (await control(api.stopRun)) toast('Stopping after the current step.');
+  // Name the request: if it finished meanwhile, the next one isn't stopped.
+  const target = chatStore.get().submissions.primary_id || '';
+  if (await control(() => api.stopRun(target))) toast('Stopping after the current step.');
 }
 
 /** Cancels everything now, tool calls included, and holds the queue. */

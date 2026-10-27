@@ -134,7 +134,7 @@ function RunState() {
     return (
       <div className="runstate">
         <span className="dot idle" />
-        <span>{waiting} request{waiting === 1 ? '' : 's'} waiting</span>
+        <span>{waiting ? `${waiting} request${waiting === 1 ? '' : 's'} waiting` : 'Paused'}</span>
         <button className="btn btn-sm" onClick={() => void resumeRuns()}><Play size={12} />Resume</button>
       </div>
     );

@@ -105,9 +105,13 @@ func TestPreviewsReadManyFormats(t *testing.T) {
 		return strings.Index(p.Content, "First slide") < strings.Index(p.Content, "Second slide") && strings.HasPrefix(p.Content, "Slide 1")
 	})
 	check("memo.odt", func(p FilePreview) bool { return strings.Contains(p.Content, "Memo line one\nLine two") })
-	check("calc.ods", func(p FilePreview) bool { return len(p.Headers) == 2 && p.Headers[1] == "Qty" && p.Rows[0][0] == "Bolts" })
+	check("calc.ods", func(p FilePreview) bool {
+		return len(p.Headers) == 2 && p.Headers[1] == "Qty" && p.Rows[0][0] == "Bolts"
+	})
 	check("files.zip", func(p FilePreview) bool { return p.Count == 2 && p.Entries[0].Name == "a/x.txt" })
-	check("logs.tar.gz", func(p FilePreview) bool { return p.Count == 1 && p.Entries[0].Name == "logs/app.log" && p.Entries[0].Size == 5 })
+	check("logs.tar.gz", func(p FilePreview) bool {
+		return p.Count == 1 && p.Entries[0].Name == "logs/app.log" && p.Entries[0].Size == 5
+	})
 }
 
 func TestSearchFindsFilesInSubfoldersOnly(t *testing.T) {
@@ -191,5 +195,174 @@ func TestCopyNeedsWriteAtTheDestination(t *testing.T) {
 	writeFile(t, filepath.Join(c.WorkspaceDir, "a.txt"), []byte("A"))
 	if _, err := a.CopyPaths(FileTransferRequest{Sources: []string{filepath.Join(c.WorkspaceDir, "a.txt")}, Dest: c.WorkspaceDir}); err == nil {
 		t.Fatal("copied into a read-only project")
+	}
+}
+
+func TestLinksAreDeletedAndMovedThemselves(t *testing.T) {
+	c := permissionConfig(t, "read-write")
+	a := permissionApp(c)
+	dir := c.WorkspaceDir
+	outside := t.TempDir()
+	writeFile(t, filepath.Join(outside, "keep.txt"), []byte("K"))
+	writeFile(t, filepath.Join(dir, "target", "inner.txt"), []byte("I"))
+	if err := os.Symlink(outside, filepath.Join(dir, "away")); err != nil {
+		t.Skip("symlinks unavailable:", err)
+	}
+	if err := os.Symlink(filepath.Join(dir, "target"), filepath.Join(dir, "near")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "dest"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// Renaming a link renames the link.
+	if _, err := a.RenamePath(FileRenameRequest{Path: filepath.Join(dir, "away"), NewName: "elsewhere"}); err != nil {
+		t.Fatal(err)
+	}
+	if target, err := os.Readlink(filepath.Join(dir, "elsewhere")); err != nil || target != outside {
+		t.Fatalf("renamed link: %q %v", target, err)
+	}
+	if _, err := a.RenamePath(FileRenameRequest{Path: dir, NewName: "renamed"}); err == nil {
+		t.Fatal("renamed the project folder")
+	}
+	// Renaming onto another file is refused, even one differing only in case.
+	writeFile(t, filepath.Join(dir, "a.txt"), []byte("a"))
+	writeFile(t, filepath.Join(dir, "B.txt"), []byte("B"))
+	if _, err := a.RenamePath(FileRenameRequest{Path: filepath.Join(dir, "a.txt"), NewName: "B.txt"}); err == nil {
+		t.Fatal("renamed over an existing file")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "b.txt")); os.IsNotExist(err) {
+		// Case-sensitive file system: b.txt and B.txt are different files.
+		writeFile(t, filepath.Join(dir, "b.txt"), []byte("b"))
+		if _, err := a.RenamePath(FileRenameRequest{Path: filepath.Join(dir, "b.txt"), NewName: "B.txt"}); err == nil {
+			t.Fatal("renamed over a file whose name differs only in case")
+		}
+		if data, _ := os.ReadFile(filepath.Join(dir, "B.txt")); string(data) != "B" {
+			t.Fatal("B.txt overwritten")
+		}
+	}
+	// Deleting a link to a folder outside the projects removes the link only.
+	if _, err := a.DeletePath(filepath.Join(dir, "elsewhere")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(filepath.Join(dir, "elsewhere")); !os.IsNotExist(err) {
+		t.Fatal("link not deleted")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "keep.txt")); err != nil {
+		t.Fatal("deleting the link removed what it pointed to")
+	}
+	// Moving a link moves the link; the folder it points to stays.
+	if _, err := a.CopyPaths(FileTransferRequest{Sources: []string{filepath.Join(dir, "near")}, Dest: filepath.Join(dir, "dest"), Move: true}); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Lstat(filepath.Join(dir, "dest", "near"))
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("moved link is not a link: %v %v", info, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "target", "inner.txt")); err != nil {
+		t.Fatal("moving the link moved its target")
+	}
+	// The project folder itself is never deleted.
+	if _, err := a.DeletePath(dir); err == nil {
+		t.Fatal("deleted the project folder")
+	}
+}
+
+func TestSaveKeepsTheFileEncoding(t *testing.T) {
+	c := permissionConfig(t, "read-write")
+	a := permissionApp(c)
+	dir := c.WorkspaceDir
+	le := []byte{0xFF, 0xFE}
+	for _, u := range utf16.Encode([]rune("old\r\n")) {
+		le = append(le, byte(u), byte(u>>8))
+	}
+	writeFile(t, filepath.Join(dir, "ps.log"), le)
+	writeFile(t, filepath.Join(dir, "bom.txt"), append([]byte{0xEF, 0xBB, 0xBF}, "old"...))
+	writeFile(t, filepath.Join(dir, "legacy.txt"), []byte("caf\xe9"))
+
+	p, err := a.SaveFile(SaveFileRequest{Path: filepath.Join(dir, "ps.log"), Content: "new ✓ text"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(filepath.Join(dir, "ps.log"))
+	if p.Encoding != "utf-16le" || p.Content != "new ✓ text" || raw[0] != 0xFF || raw[1] != 0xFE || len(raw) != 2+2*len([]rune("new ✓ text")) {
+		t.Fatalf("UTF-16 round trip: %q %q % x", p.Encoding, p.Content, raw)
+	}
+	if _, err := a.SaveFile(SaveFileRequest{Path: filepath.Join(dir, "bom.txt"), Content: "new"}); err != nil {
+		t.Fatal(err)
+	}
+	if raw, _ := os.ReadFile(filepath.Join(dir, "bom.txt")); string(raw) != "\xEF\xBB\xBFnew" {
+		t.Fatalf("byte order mark lost: % x", raw)
+	}
+	legacy, err := a.PreviewFile(filepath.Join(dir, "legacy.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if legacy.Editable || legacy.Encoding != "windows-1252" || legacy.ReadOnlyReason == "" {
+		t.Fatalf("Windows-1252 file offered for editing: %+v", legacy)
+	}
+	if _, err := a.SaveFile(SaveFileRequest{Path: filepath.Join(dir, "legacy.txt"), Content: "x"}); err == nil || !strings.Contains(err.Error(), "Windows-1252") {
+		t.Fatalf("saved over a Windows-1252 file: %v", err)
+	}
+	if raw, _ := os.ReadFile(filepath.Join(dir, "legacy.txt")); string(raw) != "caf\xe9" {
+		t.Fatal("legacy file changed")
+	}
+}
+
+func TestPreviewGuards(t *testing.T) {
+	c := permissionConfig(t, "read-only")
+	a := permissionApp(c)
+	dir := c.WorkspaceDir
+	deep := strings.Repeat("[", 60) + strings.Repeat("]", 60)
+	writeFile(t, filepath.Join(dir, "deep.json"), []byte(deep))
+	writeFile(t, filepath.Join(dir, "quoted.json"), []byte(`{"text":"[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[\"]"}`))
+	p, err := a.PreviewFile(filepath.Join(dir, "deep.json"))
+	if err != nil || p.Formatted != "" || p.Content != deep {
+		t.Fatalf("deeply nested JSON formatted: %v %q", err, p.Formatted)
+	}
+	p, err = a.PreviewFile(filepath.Join(dir, "quoted.json"))
+	if err != nil || !strings.Contains(p.Formatted, "\n  \"text\"") {
+		t.Fatalf("brackets inside strings counted as nesting: %v %q", err, p.Formatted)
+	}
+	if got := jsonDepth(`{"a":[1,{"b":"]]]"}]}`); got != 3 {
+		t.Fatalf("jsonDepth = %d", got)
+	}
+
+	// A lone .gz reports its unpacked size from the trailer.
+	f, _ := os.Create(filepath.Join(dir, "notes.txt.gz"))
+	gz := gzip.NewWriter(f)
+	gz.Write([]byte(strings.Repeat("hello ", 1000)))
+	gz.Close()
+	f.Close()
+	p, err = a.PreviewFile(filepath.Join(dir, "notes.txt.gz"))
+	if err != nil || p.Count != 1 || p.Entries[0].Size != 6000 || p.Entries[0].Name != "notes.txt" {
+		t.Fatalf("gz: %v %+v", err, p.Entries)
+	}
+
+	// Zip entries are read through a limit.
+	var big strings.Builder
+	big.WriteString(`<w:document xmlns:w="w"><w:body>`)
+	for big.Len() < 3*maxExtractedText {
+		big.WriteString(`<w:p><w:r><w:t>words words words words words words words</w:t></w:r></w:p>`)
+	}
+	big.WriteString(`</w:body></w:document>`)
+	writeZip(t, filepath.Join(dir, "long.docx"), map[string]string{"word/document.xml": big.String()})
+	p, err = a.PreviewFile(filepath.Join(dir, "long.docx"))
+	if err != nil || len(p.Content) == 0 || len(p.Content) > maxExtractedText+1000 {
+		t.Fatalf("docx text not capped: %v %d", err, len(p.Content))
+	}
+}
+
+func TestEncodeText(t *testing.T) {
+	for _, enc := range []string{"utf-8", "utf-8-bom", "utf-16le", "utf-16be"} {
+		data, err := encodeText("añ €𝄞", enc)
+		if err != nil {
+			t.Fatal(enc, err)
+		}
+		if text, got := decodeText(data, false); text != "añ €𝄞" || got != enc {
+			t.Fatalf("%s: got %q as %s", enc, text, got)
+		}
+	}
+	if _, err := encodeText("x", "windows-1252"); err == nil {
+		t.Fatal("wrote Windows-1252")
 	}
 }

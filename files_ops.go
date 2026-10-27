@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	nullbot "github.com/Bradthebrad/nullbot/pkg/app"
@@ -235,7 +236,8 @@ func (a *App) transferOne(config nullbot.Config, raw, dest string, move bool) er
 	if move {
 		capability = nullbot.CapDelete
 	}
-	source, err := checkUIProjectAccess(config, strings.TrimSpace(raw), capability, true)
+	// A link is copied or moved itself, never what it points to.
+	source, _, err := linkAwarePath(config, raw, capability)
 	if err != nil {
 		return err
 	}
@@ -249,16 +251,21 @@ func (a *App) transferOne(config nullbot.Config, raw, dest string, move bool) er
 	if move && samePath(filepath.Dir(source), dest) {
 		return nil
 	}
+	if move && info.IsDir() && isProjectRoot(config, source) {
+		return errors.New("a project folder can’t be moved from here")
+	}
 	target := availableName(dest, filepath.Base(source))
 	if _, err := checkUIProjectAccess(config, target, nullbot.CapWrite, info.IsDir()); err != nil {
 		return err
 	}
 	if move {
-		if err := os.Rename(source, target); err == nil {
-			return nil
+		err := os.Rename(source, target)
+		if err == nil || !crossDevice(err) {
+			return err
 		}
-		// Across volumes: copy, then remove the original.
+		// Only between drives: copy, then remove the original.
 		if err := copyTree(source, target); err != nil {
+			os.RemoveAll(target)
 			return err
 		}
 		return os.RemoveAll(source)
@@ -266,7 +273,67 @@ func (a *App) transferOne(config nullbot.Config, raw, dest string, move bool) er
 	return copyTree(source, target)
 }
 
+// crossDevice reports whether a rename failed because source and target are
+// on different drives or volumes.
+func crossDevice(err error) bool {
+	var errno syscall.Errno
+	if !errors.As(err, &errno) {
+		return false
+	}
+	return errno == syscall.EXDEV || (runtime.GOOS == "windows" && errno == 17) // ERROR_NOT_SAME_DEVICE
+}
+
+// linkAwarePath authorizes raw for capability. A symbolic link or junction
+// is acted on itself: what is checked is the folder it sits in, and the path
+// returned is the link, not its target. (Go reports a Windows junction as an
+// irregular file rather than a link.)
+func linkAwarePath(config nullbot.Config, raw string, capability nullbot.Capability) (string, bool, error) {
+	lexical, err := lexicalPath(config, raw)
+	if err != nil {
+		return "", false, err
+	}
+	if !nullbot.PathLexicallyInProjects(config, lexical) {
+		return "", false, fmt.Errorf("path is outside configured projects")
+	}
+	if info, err := os.Lstat(lexical); err == nil && info.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0 {
+		if _, err := checkUIProjectAccess(config, filepath.Dir(lexical), capability, false); err != nil {
+			return "", false, err
+		}
+		return lexical, true, nil
+	}
+	resolved, err := checkUIProjectAccess(config, lexical, capability, true)
+	return resolved, false, err
+}
+
+// lexicalPath makes raw absolute without touching the disk. A relative path
+// is inside the primary project, as it is for the agent's tools, never the
+// app's own working directory.
+func lexicalPath(config nullbot.Config, raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", errors.New("a path is required")
+	}
+	if !filepath.IsAbs(raw) {
+		raw = filepath.Join(config.WorkspaceDir, raw)
+	}
+	return filepath.Abs(filepath.Clean(raw))
+}
+
+func isProjectRoot(config nullbot.Config, path string) bool {
+	for _, project := range config.Projects {
+		if samePath(project.Path, path) {
+			return true
+		}
+	}
+	return false
+}
+
+// isWithin reports whether path is inside dir. Windows and macOS file
+// systems ignore case, so the comparison does too there.
 func isWithin(path, dir string) bool {
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		path, dir = strings.ToLower(path), strings.ToLower(dir)
+	}
 	rel, err := filepath.Rel(dir, path)
 	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }

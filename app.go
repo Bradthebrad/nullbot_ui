@@ -139,6 +139,11 @@ type FilePreview struct {
 	Count   int            `json:"count,omitempty"`
 	// Hex is a dump of the start of a binary file.
 	Hex string `json:"hex,omitempty"`
+	// Encoding is how a text file is stored: utf-8, utf-8-bom, utf-16le,
+	// utf-16be or windows-1252.
+	Encoding string `json:"encoding,omitempty"`
+	// ReadOnlyReason says why an otherwise editable file can't be edited.
+	ReadOnlyReason string `json:"read_only_reason,omitempty"`
 }
 
 type SaveFileRequest struct {
@@ -405,8 +410,11 @@ func (a *App) Resume() (nullbot.Reply, error) {
 
 // StopRun asks the running request to wrap up: no new tool calls, and an
 // answer saying what was done and what is left. Queued requests continue.
-func (a *App) StopRun() (nullbot.Reply, error) {
-	if err := a.bot.StopCurrent(); err != nil {
+// targetID is the request the person was looking at; if a different one is
+// running by the time this arrives, nothing stops. Empty means whichever
+// request is running.
+func (a *App) StopRun(targetID string) (nullbot.Reply, error) {
+	if err := a.bot.StopRequest(targetID); err != nil {
 		return nullbot.Reply{}, err
 	}
 	return a.runReply("Stopping. The current step finishes, then the request wraps up.")
@@ -934,16 +942,25 @@ func (a *App) SaveFile(req SaveFileRequest) (FilePreview, error) {
 		return FilePreview{}, err
 	}
 	if !preview.Editable {
+		if preview.ReadOnlyReason != "" {
+			return FilePreview{}, fmt.Errorf("%s: %s", filepath.Base(path), preview.ReadOnlyReason)
+		}
 		return FilePreview{}, fmt.Errorf("%s is not editable in the built-in editor", filepath.Base(path))
 	}
-	if err := os.WriteFile(path, []byte(req.Content), 0600); err != nil {
+	// Write it back the way it was stored: a UTF-8 or UTF-16 byte order
+	// mark stays, so other tools keep reading the file correctly.
+	data, err := encodeText(req.Content, preview.Encoding)
+	if err != nil {
+		return FilePreview{}, err
+	}
+	if err := os.WriteFile(path, data, 0600); err != nil {
 		return FilePreview{}, err
 	}
 	return a.previewFile(path)
 }
 
 func (a *App) CreateDirectory(req FileCreateRequest) (FileBrowser, error) {
-	parent, target, err := createTargetPath(req.Dir, req.Name)
+	parent, target, err := createTargetPath(a.bot.Config(), req.Dir, req.Name)
 	if err != nil {
 		return FileBrowser{}, err
 	}
@@ -957,7 +974,7 @@ func (a *App) CreateDirectory(req FileCreateRequest) (FileBrowser, error) {
 }
 
 func (a *App) CreateFile(req FileCreateRequest) (FileBrowser, error) {
-	parent, target, err := createTargetPath(req.Dir, req.Name)
+	parent, target, err := createTargetPath(a.bot.Config(), req.Dir, req.Name)
 	if err != nil {
 		return FileBrowser{}, err
 	}
@@ -975,52 +992,68 @@ func (a *App) CreateFile(req FileCreateRequest) (FileBrowser, error) {
 }
 
 func (a *App) RenamePath(req FileRenameRequest) (FileBrowser, error) {
-	path, err := filepath.Abs(filepath.Clean(req.Path))
+	config := a.bot.Config()
+	lexical, err := lexicalPath(config, req.Path)
 	if err != nil {
 		return FileBrowser{}, err
 	}
-	if _, err := os.Stat(path); err != nil {
-		return FileBrowser{}, err
-	}
-	parent := filepath.Dir(path)
-	_, target, err := createTargetPath(parent, req.NewName)
+	// A link is renamed itself, never what it points to.
+	path, _, err := linkAwarePath(config, lexical, nullbot.CapWrite)
 	if err != nil {
 		return FileBrowser{}, err
 	}
-	if samePath(path, target) {
-		return a.listFiles(parent)
+	if isProjectRoot(config, lexical) || isProjectRoot(config, path) {
+		return FileBrowser{}, fmt.Errorf("a project folder can’t be renamed from here; change it in Settings")
 	}
-	if _, err := os.Stat(target); err == nil {
-		return FileBrowser{}, fmt.Errorf("%s already exists", target)
-	} else if !os.IsNotExist(err) {
+	listed := filepath.Dir(lexical)
+	_, target, err := createTargetPath(config, listed, req.NewName)
+	if err != nil {
 		return FileBrowser{}, err
 	}
-	if _, err := checkUIProjectPath(a.bot.Config(), path, true, true); err != nil {
+	if filepath.Base(lexical) == filepath.Base(target) {
+		return a.listFiles(listed)
+	}
+	source, err := os.Lstat(path)
+	if err != nil {
 		return FileBrowser{}, err
 	}
-	if _, err := checkUIProjectPath(a.bot.Config(), target, true, true); err != nil {
+	// On a file system that ignores case, the new name can find the file
+	// itself: a change of case alone is still a rename.
+	if existing, err := os.Lstat(target); err == nil && !os.SameFile(source, existing) {
+		return FileBrowser{}, fmt.Errorf("%s already exists", filepath.Base(target))
+	} else if err != nil && !os.IsNotExist(err) {
+		return FileBrowser{}, err
+	}
+	if _, err := checkUIProjectPath(config, target, true, true); err != nil {
 		return FileBrowser{}, err
 	}
 	if err := os.Rename(path, target); err != nil {
 		return FileBrowser{}, err
 	}
-	return a.listFiles(parent)
+	return a.listFiles(listed)
 }
 
-func (a *App) DeletePath(path string) (FileBrowser, error) {
-	path, err := checkUIProjectAccess(a.bot.Config(), path, nullbot.CapDelete, true)
+func (a *App) DeletePath(raw string) (FileBrowser, error) {
+	config := a.bot.Config()
+	// A link is deleted itself, never what it points to.
+	path, link, err := linkAwarePath(config, raw, nullbot.CapDelete)
 	if err != nil {
 		return FileBrowser{}, err
+	}
+	parent := filepath.Dir(path)
+	workspace, _ := filepath.Abs(filepath.Clean(config.WorkspaceDir))
+	if samePath(path, workspace) || samePath(path, parent) || filepath.Base(path) == string(filepath.Separator) || isProjectRoot(config, path) {
+		return FileBrowser{}, fmt.Errorf("refusing to delete protected directory %s", path)
+	}
+	if link {
+		if err := os.Remove(path); err != nil {
+			return FileBrowser{}, err
+		}
+		return a.listFiles(parent)
 	}
 	info, err := os.Stat(path)
 	if err != nil {
 		return FileBrowser{}, err
-	}
-	config := a.bot.Config()
-	workspace, _ := filepath.Abs(filepath.Clean(config.WorkspaceDir))
-	parent := filepath.Dir(path)
-	if samePath(path, workspace) || samePath(path, parent) || filepath.Base(path) == string(filepath.Separator) {
-		return FileBrowser{}, fmt.Errorf("refusing to delete protected directory %s", path)
 	}
 	if info.IsDir() {
 		if err := os.RemoveAll(path); err != nil {
@@ -1745,10 +1778,14 @@ func (a *App) listFiles(path string) (FileBrowser, error) {
 	}, nil
 }
 
-func createTargetPath(dir, name string) (string, string, error) {
-	parent, err := filepath.Abs(filepath.Clean(strings.TrimSpace(dir)))
+func createTargetPath(config nullbot.Config, dir, name string) (string, string, error) {
+	parent, err := lexicalPath(config, dir)
 	if err != nil {
 		return "", "", err
+	}
+	// Refuse paths outside the projects before touching the disk.
+	if !nullbot.PathLexicallyInProjects(config, parent) {
+		return "", "", fmt.Errorf("path is outside configured projects")
 	}
 	info, err := os.Stat(parent)
 	if err != nil {
@@ -2011,7 +2048,7 @@ func parseXLSXPreview(path string) ([]string, [][]string, error) {
 	if file == nil {
 		return nil, nil, fmt.Errorf("worksheet not found")
 	}
-	rc, err := file.Open()
+	rc, err := openZipEntry(file)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2028,7 +2065,7 @@ func readSharedStrings(files []*zip.File) []string {
 	if file == nil {
 		return nil
 	}
-	rc, err := file.Open()
+	rc, err := openZipEntry(file)
 	if err != nil {
 		return nil
 	}
@@ -2058,7 +2095,10 @@ func readSharedStrings(files []*zip.File) []string {
 			switch t.Name.Local {
 			case "si":
 				inSI = false
-				out = append(out, b.String())
+				out = append(out, truncateRunes(b.String(), 2000))
+				if len(out) >= 200_000 {
+					return out
+				}
 			case "t":
 				inT = false
 			}
@@ -2113,6 +2153,10 @@ func decodeWorksheetRows(reader io.Reader, shared []string, limit int) [][]strin
 			switch t.Name.Local {
 			case "c":
 				col := cellColumnIndex(cellRef)
+				if col >= 200 {
+					// Far-right columns aren't shown; don't allocate up to them.
+					continue
+				}
 				for len(current) <= col {
 					current = append(current, "")
 				}
@@ -2122,7 +2166,7 @@ func decodeWorksheetRows(reader io.Reader, shared []string, limit int) [][]strin
 						value = shared[idx]
 					}
 				}
-				current[col] = value
+				current[col] = truncateRunes(value, 2000)
 			case "v", "t":
 				inV = false
 			case "row":
@@ -2151,7 +2195,7 @@ func extractDocxText(path string) (string, error) {
 	if file == nil {
 		return "", fmt.Errorf("word/document.xml not found")
 	}
-	rc, err := file.Open()
+	rc, err := openZipEntry(file)
 	if err != nil {
 		return "", err
 	}
@@ -2185,6 +2229,9 @@ func extractDocxText(path string) (string, error) {
 			if inText {
 				b.Write([]byte(t))
 			}
+		}
+		if b.Len() > maxExtractedText {
+			break
 		}
 	}
 	return strings.TrimSpace(b.String()), nil

@@ -179,7 +179,7 @@ export function StopEverything():Promise<app.Reply>;
 
 export function StopMCPServer(arg1:string):Promise<Array<any>>;
 
-export function StopRun():Promise<app.Reply>;
+export function StopRun(arg1:string):Promise<app.Reply>;
 
 export function Submit(arg1:string):Promise<app.Reply>;
 

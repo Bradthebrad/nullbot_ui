@@ -38,6 +38,9 @@ describe('run controls', () => {
     expect(phase(running({run_paused: true, paused: true}))).toBe('paused');
     expect(phase(running({stopping: true}))).toBe('stopping');
     expect(phase({busy: true, paused: true, queue: [{id: 'q'}], jobs: []})).toBe('held');
+    // A pause still in place with nothing left to run keeps Resume reachable.
+    expect(phase({busy: false, paused: true, queue: [], jobs: []})).toBe('held');
+    expect(phase({busy: false, run_paused: true, queue: [], jobs: []})).toBe('held');
   });
 
   it('pauses, resumes, stops after this step, or stops everything', async () => {
@@ -55,11 +58,20 @@ describe('run controls', () => {
     bridge.set('StopRun', () => ({data: {submissions: running({stopping: true})}}));
     fireEvent.click(screen.getAllByRole('button', {name: 'Stop'})[0]);
     await waitFor(() => expect(runstate()).toContain('Stopping'));
-    expect(bridge.callsTo('StopRun')).toHaveLength(1);
+    // Stop names the request on screen, so a newer one is never stopped by mistake.
+    expect(bridge.callsTo('StopRun')).toEqual([['s1']]);
 
     fireEvent.click(screen.getByRole('button', {name: 'More ways to stop'}));
     fireEvent.click(screen.getByRole('menuitem', {name: /Stop everything now/}));
     await waitFor(() => expect(bridge.callsTo('StopEverything')).toHaveLength(1));
+  });
+
+  it('offers Resume when a pause outlives the run', async () => {
+    await boot({busy: false, paused: true, queue: [], jobs: []});
+    expect(document.querySelector('.runstate')?.textContent).toContain('Paused');
+    fireEvent.click(screen.getByRole('button', {name: 'Resume'}));
+    await act(async () => undefined);
+    expect(bridge.callsTo('Resume')).toHaveLength(1);
   });
 
   it('offers Resume when queued requests are held', async () => {

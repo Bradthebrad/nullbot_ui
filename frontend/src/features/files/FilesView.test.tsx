@@ -4,7 +4,7 @@ import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {installBridge, type FakeBridge} from '../../test/bridge';
 import {FilesView, fileClipboard} from './FilesView';
-import {PreviewContent} from './Preview';
+import {PreviewContent, PreviewPane} from './Preview';
 import {lookFor} from './fileIcons';
 import {appStore} from '../../state/app';
 import {DialogHost} from '../../ui/dialogs';
@@ -104,6 +104,32 @@ describe('Files', () => {
     fireEvent.contextMenu(row('notes.md'));
     fireEvent.click(menuItem('Duplicate'));
     await waitFor(() => expect(bridge.callsTo('CopyPaths').at(-1)).toEqual([{sources: [`${root}\\notes.md`], dest: root, move: false}]));
+  });
+
+  it('leaves Alt+arrows to text fields and refreshes search results after a change', async () => {
+    await mount();
+    fireEvent.click(row('reports'));
+    await screen.findByText('q3.md');
+    const search = screen.getByRole('textbox', {name: 'Filter this folder'});
+    fireEvent.keyDown(search, {key: 'ArrowLeft', altKey: true});
+    expect(screen.getByText('q3.md')).toBeTruthy();
+    fireEvent.keyDown(row('q3.md'), {key: 'ArrowLeft', altKey: true});
+    await screen.findByText('notes.md');
+
+    fireEvent.click(screen.getByRole('radio', {name: 'Subfolders too'}));
+    fireEvent.change(screen.getByRole('textbox', {name: /Search this folder and its subfolders/}), {target: {value: 'report'}});
+    await screen.findByText('q3-report.md', {}, {timeout: 2000});
+    const searches = bridge.callsTo('SearchFiles').length;
+    fireEvent.contextMenu(row('q3-report.md'));
+    fireEvent.click(menuItem('Duplicate'));
+    await waitFor(() => expect(bridge.callsTo('SearchFiles').length).toBeGreaterThan(searches));
+  });
+
+  it('says why a file can’t be edited', () => {
+    render(<PreviewPane preview={{path: `${root}\\old.txt`, name: 'old.txt', kind: 'text', mime: 'text/plain', size: 4, editable: false, truncated: false, content: 'café', encoding: 'windows-1252', read_only_reason: 'Stored as Windows-1252 text; edit it in another app to keep that encoding'}} writable onSaved={() => undefined} />);
+    const edit = screen.getByRole('button', {name: 'Edit'}) as HTMLButtonElement;
+    expect(edit.disabled).toBe(true);
+    expect(edit.title).toMatch(/Windows-1252/);
   });
 
   it('selects several files and deletes them together', async () => {
