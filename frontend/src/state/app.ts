@@ -3,7 +3,7 @@ import {api} from '../lib/bindings';
 import {guard} from '../lib/dirty';
 import type {MCPServerStatus, ModelGroup, ProjectsState, UIState} from '../lib/types';
 
-export type View = 'chat' | 'activity' | 'files' | 'tools' | 'history' | 'settings';
+export type View = 'chat' | 'activity' | 'files' | 'visuals' | 'tools' | 'history' | 'settings';
 export type SettingsSection = 'projects' | 'models' | 'accounts' | 'agent' | 'prompts' | 'appearance' | 'usage';
 
 export type AppState = {
@@ -23,6 +23,8 @@ export type AppState = {
   inspectorTab: 'activity' | 'side';
   paletteOpen: boolean;
   fileRequest: {path: string; nonce: number} | null;
+  /** A visual to select in the Visuals view. */
+  visualRequest: string;
   selectedServer: string;
   focusStep: string;
   /** Bumped when the backend announces a change; views refetch on demand. */
@@ -63,6 +65,7 @@ export const appStore = createStore<AppState>({
   inspectorTab: 'activity',
   paletteOpen: false,
   fileRequest: null,
+  visualRequest: '',
   selectedServer: '',
   focusStep: '',
   versions: {},

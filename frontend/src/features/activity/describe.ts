@@ -129,6 +129,8 @@ const registry: Record<string, Describer> = {
   command_kill: () => ({verb: v('Stopping', 'Stopped', 'Couldn’t stop'), object: 'a command', category: 'command'}),
 
   // NullBot built-ins
+  visualize: a => ({verb: v('Showing you', 'Showed you', 'Couldn’t show you'), object: quoted(pick(a, 'title'), 48) || 'a visual', category: 'image'}),
+  visualize_results: () => ({verb: v('Reading', 'Read', 'Couldn’t read'), object: 'your responses to visuals', category: 'nullbot'}),
   spawn_subagent: a => ({verb: v('Starting', 'Started', 'Couldn’t start'), object: `subagent ${quoted(pick(a, 'name', 'task_name'), 28) || ''}`.trim(), category: 'agent'}),
   subagent_status: () => ({verb: v('Checking', 'Checked', 'Couldn’t check'), object: 'subagents', category: 'agent'}),
   subagent_wait: () => ({verb: v('Waiting for', 'Waited for', 'Stopped waiting for'), object: 'subagent results', category: 'agent'}),

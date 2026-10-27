@@ -24,7 +24,7 @@ func main() {
 		MinHeight: 640,
 		AssetServer: &assetserver.Options{
 			Assets:  assets,
-			Handler: app.localFiles,
+			Handler: app.assetHandler(),
 		},
 		BackgroundColour: &options.RGBA{R: 14, G: 15, B: 17, A: 1},
 		SingleInstanceLock: &options.SingleInstanceLock{

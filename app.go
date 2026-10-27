@@ -39,6 +39,8 @@ type App struct {
 	batcher      *activityBatcher
 	changes      *changeDebouncer
 	localFiles   *localFiles
+	visuals      *visualSites
+	visualOnce   sync.Once
 }
 
 type UIState struct {
@@ -298,6 +300,8 @@ func NewApp() *App {
 	} else {
 		a.bot = nullbot.New(nullbot.DefaultConfig())
 	}
+	// This app can show visuals, so the agent gets the visualize tools.
+	a.bot.EnableVisuals()
 	return a
 }
 

@@ -257,3 +257,24 @@ export type Plan = {
   notes?: string[];
 };
 export type PlanSummary = {id: string; name: string; goal?: string; status: string; progress: string; current_step?: string; updated_at?: string; path?: string};
+
+/** A visual the agent showed: a page, picture, chart, diagram or poll. */
+export type VisualKind = 'poll' | 'html' | 'svg' | 'image' | 'chart' | 'drawio' | 'file';
+export type VisualOption = {id: string; label: string; description?: string; image?: string};
+export type Visualization = {
+  id: string; title: string; kind: VisualKind; prompt?: string;
+  options?: VisualOption[]; multiple?: boolean; allow_other?: boolean; labels?: string[];
+  source?: string; root?: string; content_file?: string; allow_network?: boolean; wait?: boolean;
+  /** open until answered; submitted; dismissed (skipped). */
+  status: 'open' | 'submitted' | 'dismissed';
+  project_id?: string; project_name?: string; session_id?: string; submission_id?: string; task_id?: string;
+  created_at: string; updated_at: string; responded_at?: string;
+  response?: unknown; note?: string; events: number; dropped?: number; dir: string;
+  /** An agent is waiting for the answer right now. */
+  waiting?: boolean;
+};
+export type VisualView = {visual: Visualization; document?: string; page?: string; assets?: Record<string, string>; preview?: FilePreview; error?: string};
+export type VisualDelivery = {visual: Visualization; how: 'tool' | 'steer' | 'queued' | 'started' | 'saved'; message?: string};
+/** One recorded interaction, as the bridge or the window collected it. */
+export type VisualEvent = {type: string; t?: number; at?: string; page?: string; target?: string; value?: unknown; key?: string; name?: string; label?: string; message?: string; level?: string; text?: string; url?: string; source?: string; data?: unknown; [key: string]: unknown};
+

@@ -5,6 +5,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"encoding/xml"
@@ -87,6 +88,7 @@ func init() {
 	add("pptx", ".pptx", ".pptm", ".ppsx")
 	add("odp", ".odp")
 	add("pdf", ".pdf")
+	add("drawio", ".drawio", ".dio")
 	add("image", ".png", ".jpg", ".jpeg", ".jfif", ".gif", ".webp", ".bmp", ".svg", ".ico", ".avif", ".apng")
 	add("audio", ".mp3", ".wav", ".ogg", ".oga", ".m4a", ".aac", ".flac", ".opus", ".weba")
 	add("video", ".mp4", ".m4v", ".webm", ".ogv", ".mov")
@@ -228,6 +230,20 @@ func (a *App) previewFile(path string) (FilePreview, error) {
 		}
 		preview.Content = truncateRunes(text, 60000)
 		preview.Truncated = utf8.RuneCountInString(text) > 60000
+	case "drawio":
+		// Drawn here as a picture of its first page.
+		data, err := readLimited(path, maxDrawioBytes)
+		if err == nil {
+			var pages []drawioPage
+			if pages, err = drawioPages(data); err == nil {
+				preview.DataURL = "data:image/svg+xml;base64," + base64.StdEncoding.EncodeToString([]byte(pages[0].SVG))
+				preview.Count = len(pages)
+				preview.Content = pages[0].Name
+			}
+		}
+		if err != nil {
+			preview.Error = "Couldn’t draw this diagram: " + err.Error()
+		}
 	case "archive":
 		entries, total, err := listArchive(path)
 		if err != nil {

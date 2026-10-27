@@ -1,6 +1,6 @@
 // Typed subscriptions to bridge events.
 import {EventsOn} from '../../wailsjs/runtime/runtime';
-import type {ActivityRecord, MCPServerStatus, Reply, SubmissionSnapshot} from './types';
+import type {ActivityRecord, MCPServerStatus, Reply, SubmissionSnapshot, Visualization} from './types';
 
 function on<T>(name: string, handler: (payload: T) => void): () => void {
   if (typeof window === 'undefined' || !(window as any).runtime) return () => {};
@@ -16,3 +16,7 @@ export const onSubmissions = (handler: (snapshot: SubmissionSnapshot) => void) =
 export const onMCP = (handler: (servers: MCPServerStatus[]) => void) => on('mcp', handler);
 export const onChanged = (handler: (change: {topic: string}) => void) => on('changed', handler);
 export const onStatus = (handler: (status: {message: string}) => void) => on('status', handler);
+/** Visuals waiting for a response, whenever that set changes. */
+export const onVisuals = (handler: (visuals: Visualization[] | null) => void) => on('visuals', handler);
+/** A visual's frame tried to open another of its pages. */
+export const onVisualNavigate = (handler: (nav: {id: string; page: string}) => void) => on('visual-navigate', handler);

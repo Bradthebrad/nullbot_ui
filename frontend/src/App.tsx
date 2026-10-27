@@ -1,7 +1,7 @@
 import {useEffect} from 'react';
 import {useStore} from './lib/store';
 import {api} from './lib/bindings';
-import {onActivity, onChanged, onMCP, onReply, onStatus, onSubmissions} from './lib/events';
+import {onActivity, onChanged, onMCP, onReply, onStatus, onSubmissions, onVisuals} from './lib/events';
 import {installLinkInterceptor} from './lib/links';
 import {appStore, applyUIState, bumpVersion, openFile, refreshState, setView, toggleInspector} from './state/app';
 import {bootstrapChat, handleReply, handleSubmissions, queueActivity} from './state/chat';
@@ -13,12 +13,15 @@ import {ActivityView} from './features/activity/ActivityView';
 import {FilesView} from './features/files/FilesView';
 import {ToolsView} from './features/tools/ToolsView';
 import {HistoryView} from './features/history/HistoryView';
+import {VisualsView} from './features/visuals/VisualsView';
+import {VisualWindow} from './features/visuals/VisualWindow';
+import {bootstrapVisuals, handleLiveVisuals} from './state/visuals';
 import {SettingsView} from './features/settings/SettingsView';
 import {DialogHost} from './ui/dialogs';
 import {ErrorBoundary} from './ui/ErrorBoundary';
 import {ToastHost, toast, toastError} from './ui/toast';
 
-const viewNames = {chat: 'The conversation', activity: 'Activity', files: 'Files', tools: 'Tools', history: 'History', settings: 'Settings'} as const;
+const viewNames = {chat: 'The conversation', activity: 'Activity', files: 'Files', visuals: 'Visuals', tools: 'Tools', history: 'History', settings: 'Settings'} as const;
 
 export default function App() {
   const ready = useStore(appStore, state => state.ready);
@@ -33,6 +36,7 @@ export default function App() {
         applyUIState(ui);
         bootstrapChat(ui.reply);
         appStore.set({ready: true});
+        void bootstrapVisuals();
         if (!ui.models_fresh) api.modelCatalog(false).then(models => appStore.set({models})).catch(() => undefined);
       })
       .catch(err => appStore.set({ready: true, error: String(err instanceof Error ? err.message : err)}));
@@ -43,6 +47,10 @@ export default function App() {
       onActivity(queueActivity),
       onReply(handleReply),
       onSubmissions(handleSubmissions),
+      onVisuals(list => {
+        handleLiveVisuals(list);
+        bumpVersion('visuals');
+      }),
       onMCP(servers => {
         appStore.set({mcp: servers});
         // Views showing one server's details refetch, at most a few times a second.
@@ -77,7 +85,7 @@ export default function App() {
       } else if (key === ',') {
         event.preventDefault();
         setView('settings');
-      } else if (/^[1-5]$/.test(key)) {
+      } else if (/^[1-6]$/.test(key)) {
         event.preventDefault();
         setView(railViews[Number(key) - 1]);
       }
@@ -114,6 +122,7 @@ export default function App() {
                 <ErrorBoundary area={viewNames[view]} resetKey={view}>
                   {view === 'activity' && <ActivityView />}
                   {view === 'files' && <FilesView />}
+                  {view === 'visuals' && <VisualsView />}
                   {view === 'tools' && <ToolsView />}
                   {view === 'history' && <HistoryView />}
                   {view === 'settings' && <SettingsView />}
@@ -123,6 +132,7 @@ export default function App() {
           )}
         </main>
       </div>
+      {ready && !error && <ErrorBoundary area="The visual window"><VisualWindow /></ErrorBoundary>}
       <Palette />
       <DialogHost />
       <ToastHost />

@@ -7,11 +7,13 @@ import {MenuButton, type MenuItem} from '../ui/Menu';
 import {toast, toastError} from '../ui/toast';
 import {formatDuration, permissionLabel, shorten} from '../lib/format';
 import {useNow} from '../lib/useNow';
+import {openVisual, visualStore} from '../state/visuals';
 
 const titles: Record<View, string> = {
   chat: 'Chat',
   activity: 'Activity',
   files: 'Files',
+  visuals: 'Visuals',
   tools: 'Tools',
   history: 'History',
   settings: 'Settings',
@@ -33,6 +35,7 @@ export function TopBar() {
         )}
       </div>
       <div className="topbar-right">
+        <WaitingVisual />
         <RunState />
         <ToolHealth />
         <button className="btn btn-ghost palette-trigger" onClick={() => appStore.set({paletteOpen: true})} title="Search and commands (Ctrl+K)">
@@ -117,6 +120,19 @@ function ModelSwitcher() {
       label={<><span className="chip-main">{model || 'Choose a model'}</span>{effort && <span className="chip-sub">{effort}</span>}<ChevronDown size={13} /></>}
       items={items}
     />
+  );
+}
+
+/** A visual the agent is waiting on: one click brings it back. */
+function WaitingVisual() {
+  const waiting = useStore(visualStore, state => state.live.filter(v => v.waiting), shallowEqual);
+  if (!waiting.length) return null;
+  const first = waiting[0];
+  return (
+    <button className="btn btn-sm visual-waiting-chip" onClick={() => openVisual(first)} title={`NullBot is waiting for your answer to “${first.title}”`}>
+      <span className="dot live" aria-hidden="true" />
+      {waiting.length === 1 ? `Answer: ${shorten(first.title, 28)}` : `${waiting.length} visuals waiting`}
+    </button>
   );
 }
 

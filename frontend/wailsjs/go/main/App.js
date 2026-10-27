@@ -98,6 +98,10 @@ export function DeleteServiceAccount(arg1) {
   return window['go']['main']['App']['DeleteServiceAccount'](arg1);
 }
 
+export function DeleteVisualization(arg1) {
+  return window['go']['main']['App']['DeleteVisualization'](arg1);
+}
+
 export function DiscoverMCPTools(arg1) {
   return window['go']['main']['App']['DiscoverMCPTools'](arg1);
 }
@@ -112,6 +116,10 @@ export function InstallMarketPackage(arg1, arg2, arg3) {
 
 export function ListFiles(arg1) {
   return window['go']['main']['App']['ListFiles'](arg1);
+}
+
+export function LiveVisualizations() {
+  return window['go']['main']['App']['LiveVisualizations']();
 }
 
 export function LoadSession(arg1, arg2) {
@@ -154,6 +162,10 @@ export function OpenPath(arg1) {
   return window['go']['main']['App']['OpenPath'](arg1);
 }
 
+export function OpenVisualization(arg1, arg2) {
+  return window['go']['main']['App']['OpenVisualization'](arg1, arg2);
+}
+
 export function OpenWith(arg1) {
   return window['go']['main']['App']['OpenWith'](arg1);
 }
@@ -194,12 +206,20 @@ export function ReadSkill(arg1) {
   return window['go']['main']['App']['ReadSkill'](arg1);
 }
 
+export function RecordVisualEvents(arg1, arg2) {
+  return window['go']['main']['App']['RecordVisualEvents'](arg1, arg2);
+}
+
 export function RemoveQueuedChat(arg1) {
   return window['go']['main']['App']['RemoveQueuedChat'](arg1);
 }
 
 export function RenamePath(arg1) {
   return window['go']['main']['App']['RenamePath'](arg1);
+}
+
+export function RespondVisualization(arg1) {
+  return window['go']['main']['App']['RespondVisualization'](arg1);
 }
 
 export function RestartMCPServer(arg1) {
@@ -212,6 +232,10 @@ export function Resume() {
 
 export function RevealPath(arg1) {
   return window['go']['main']['App']['RevealPath'](arg1);
+}
+
+export function RevealVisualization(arg1) {
+  return window['go']['main']['App']['RevealVisualization'](arg1);
 }
 
 export function RunScheduledTaskNow(arg1) {
@@ -388,4 +412,20 @@ export function Usage() {
 
 export function UsageSummary() {
   return window['go']['main']['App']['UsageSummary']();
+}
+
+export function VisualEvents(arg1, arg2) {
+  return window['go']['main']['App']['VisualEvents'](arg1, arg2);
+}
+
+export function VisualPage(arg1, arg2, arg3) {
+  return window['go']['main']['App']['VisualPage'](arg1, arg2, arg3);
+}
+
+export function Visualization(arg1) {
+  return window['go']['main']['App']['Visualization'](arg1);
+}
+
+export function Visualizations(arg1) {
+  return window['go']['main']['App']['Visualizations'](arg1);
 }

@@ -51,6 +51,8 @@ export function DeleteScheduledTask(arg1:string):Promise<Array<app.ScheduledTask
 
 export function DeleteServiceAccount(arg1:string):Promise<void>;
 
+export function DeleteVisualization(arg1:string):Promise<void>;
+
 export function DiscoverMCPTools(arg1:string):Promise<Array<main.MCPToolInfo>>;
 
 export function ExecutePlan(arg1:string):Promise<app.Reply>;
@@ -58,6 +60,8 @@ export function ExecutePlan(arg1:string):Promise<app.Reply>;
 export function InstallMarketPackage(arg1:string,arg2:boolean,arg3:boolean):Promise<main.MarketState>;
 
 export function ListFiles(arg1:string):Promise<main.FileBrowser>;
+
+export function LiveVisualizations():Promise<Array<any>>;
 
 export function LoadSession(arg1:string,arg2:number):Promise<app.Reply>;
 
@@ -79,6 +83,8 @@ export function OpenExternal(arg1:string):Promise<void>;
 
 export function OpenPath(arg1:string):Promise<void>;
 
+export function OpenVisualization(arg1:string,arg2:string):Promise<any>;
+
 export function OpenWith(arg1:string):Promise<void>;
 
 export function Pause():Promise<app.Reply>;
@@ -99,15 +105,21 @@ export function ReadSession(arg1:string,arg2:number):Promise<Array<app.Message>>
 
 export function ReadSkill(arg1:string):Promise<main.FilePreview>;
 
+export function RecordVisualEvents(arg1:string,arg2:Array<Record<string, any>>):Promise<void>;
+
 export function RemoveQueuedChat(arg1:string):Promise<app.SubmissionSnapshot>;
 
 export function RenamePath(arg1:main.FileRenameRequest):Promise<main.FileBrowser>;
+
+export function RespondVisualization(arg1:any):Promise<any>;
 
 export function RestartMCPServer(arg1:string):Promise<any>;
 
 export function Resume():Promise<app.Reply>;
 
 export function RevealPath(arg1:string):Promise<void>;
+
+export function RevealVisualization(arg1:string):Promise<void>;
 
 export function RunScheduledTaskNow(arg1:string):Promise<Array<app.ScheduledTask>>;
 
@@ -196,3 +208,11 @@ export function ToggleMCPServer(arg1:string,arg2:string):Promise<main.UIState>;
 export function Usage():Promise<app.UsageSnapshot>;
 
 export function UsageSummary():Promise<app.UsageSnapshot>;
+
+export function VisualEvents(arg1:string,arg2:number):Promise<Array<Record<string, any>>>;
+
+export function VisualPage(arg1:string,arg2:string,arg3:string):Promise<any>;
+
+export function Visualization(arg1:string):Promise<any>;
+
+export function Visualizations(arg1:string):Promise<Array<any>>;

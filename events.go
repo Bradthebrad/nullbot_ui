@@ -113,6 +113,8 @@ func (a *App) publishChange(topic string) {
 		a.emit("submissions", a.bot.SubmissionState())
 	case nullbot.ChangeMCP:
 		a.emit("mcp", a.bot.MCPStatus(false))
+	case nullbot.ChangeVisuals:
+		a.emit("visuals", a.bot.LiveVisualizations())
 	default:
 		a.emit("changed", map[string]string{"topic": topic})
 	}

@@ -1,5 +1,9 @@
 import {memo, useLayoutEffect, useRef, useState} from 'react';
 import {ChevronRight, ShieldAlert} from 'lucide-react';
+import {shallowEqual} from '../../lib/store';
+import {kindNames, openVisual, visualStore} from '../../state/visuals';
+import {VisualIcon} from '../visuals/visualIcons';
+import {statusLabel} from '../visuals/VisualsView';
 import {useStore} from '../../lib/store';
 import {chatStore} from '../../state/chat';
 import {appStore, openSettings, setView} from '../../state/app';
@@ -134,6 +138,7 @@ const MessageRow = memo(function MessageRow({message, rowKey, botName, disclosur
         )}
         {visible.attachments.length > 0 && <AttachmentTray attachments={visible.attachments} readonly />}
         {message.streamState === 'incomplete' && <p className="row-note faint">The response stopped before it finished.</p>}
+        {!user && message.submission_id && <TurnVisuals submissionId={message.submission_id} />}
         {!user && !message.pending && message.submission_id && <TurnTools submissionId={message.submission_id} />}
       </div>
     </article>
@@ -157,6 +162,29 @@ function WorkingLine() {
       <span>{step || 'Working'}</span>
       <button className="link-button" onClick={() => appStore.set({inspectorOpen: true, inspectorTab: 'activity'})}>Show steps</button>
     </p>
+  );
+}
+
+/** Visuals this request showed, each a click from its window. */
+function TurnVisuals({submissionId}: {submissionId: string}) {
+  const visuals = useStore(visualStore, state => Object.values(state.known).filter(v => v.submission_id === submissionId).map(v => state.live.find(l => l.id === v.id) || v), shallowEqual);
+  if (!visuals.length) return null;
+  return (
+    <div className="turn-visuals">
+      {visuals.map(visual => {
+        const status = statusLabel(visual);
+        return (
+          <button key={visual.id} className={`turn-visual${visual.waiting ? ' is-waiting' : ''}`} onClick={() => openVisual(visual)} title="Open in the visual window">
+            <VisualIcon kind={visual.kind} size={15} />
+            <span className="turn-visual-text">
+              <span className="turn-visual-title">{visual.title}</span>
+              <span className="faint">{kindNames[visual.kind] || 'Visual'}</span>
+            </span>
+            <span className={`tag ${status.tone}`}>{visual.waiting && <span className="dot live" aria-hidden="true" />}{status.label}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

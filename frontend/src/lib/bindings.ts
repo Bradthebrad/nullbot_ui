@@ -3,7 +3,7 @@
 import * as Go from '../../wailsjs/go/main/App';
 import type {
   AgentTask, FileBrowser, FileSearchKind, FileSearchResult, HistoryEntry, HistoryQuery, HistorySearchResult, FilePreview, MCPServerStatus, MarketState, ModelGroup, Plan, ProjectsState, Project,
-  Reply, ScheduledTask, SessionSummary, SkillFile, SubmissionSnapshot, UIState, UsageReport,
+  Reply, ScheduledTask, SessionSummary, SkillFile, SubmissionSnapshot, UIState, UsageReport, Visualization, VisualDelivery, VisualEvent, VisualView,
 } from './types';
 
 const go = Go as unknown as Record<string, (...args: any[]) => Promise<any>>;
@@ -53,6 +53,17 @@ export const api = {
   searchFiles: (root: string, query: string, kind: FileSearchKind = '') => call<FileSearchResult>('SearchFiles', {root, query, kind}),
   copyPaths: (sources: string[], dest: string, move = false) => call<FileBrowser>('CopyPaths', {sources, dest, move}),
   revealPath: (path: string) => call<void>('RevealPath', path),
+
+  liveVisualizations: () => call<Visualization[]>('LiveVisualizations'),
+  visualizations: (projectID = '') => call<Visualization[]>('Visualizations', projectID),
+  visualization: (id: string) => call<Visualization>('Visualization', id),
+  openVisualization: (id: string) => call<VisualView>('OpenVisualization', id, window.location.origin),
+  visualPage: (id: string, page: string) => call<VisualView>('VisualPage', id, window.location.origin, page),
+  recordVisualEvents: (id: string, events: VisualEvent[]) => call<void>('RecordVisualEvents', id, events),
+  visualEvents: (id: string, limit = 2000) => call<VisualEvent[]>('VisualEvents', id, limit),
+  respondVisualization: (id: string, response: unknown, note: string, dismiss = false) => call<VisualDelivery>('RespondVisualization', {id, response: response ?? null, note, dismiss}),
+  deleteVisualization: (id: string) => call<void>('DeleteVisualization', id),
+  revealVisualization: (id: string) => call<void>('RevealVisualization', id),
 
   mcpServers: () => call<MCPServerStatus[]>('MCPServers'),
   mcpServer: (id: string) => call<MCPServerStatus>('MCPServer', id),

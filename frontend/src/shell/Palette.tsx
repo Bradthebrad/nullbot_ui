@@ -4,6 +4,7 @@ import {useStore} from '../lib/store';
 import {api} from '../lib/bindings';
 import {appStore, applyAppearance, applyUIState, openSettings, setView, toggleInspector, type SettingsSection} from '../state/app';
 import {analyzeWorkspace, chatStore, clearConversation, compactConversation, createPlan, pauseRuns, resumeRuns, runPhase, stopEverything, stopRun} from '../state/chat';
+import {openVisual, visualStore} from '../state/visuals';
 import {confirmDialog, promptDialog} from '../ui/dialogs';
 import {toast, toastError} from '../ui/toast';
 
@@ -14,6 +15,7 @@ function useCommands(): Command[] {
   const mcp = useStore(appStore, state => state.mcp);
   const phase = useStore(chatStore, runPhase);
   const queued = useStore(chatStore, state => state.submissions.queue?.length || 0);
+  const waiting = useStore(visualStore, state => state.live.find(v => v.waiting));
   const config = useStore(appStore, state => state.config);
   return useMemo(() => {
     const go = (view: Parameters<typeof setView>[0]) => () => setView(view);
@@ -22,8 +24,9 @@ function useCommands(): Command[] {
       {id: 'go-chat', group: 'Go to', title: 'Chat', hint: 'Ctrl+1', run: go('chat')},
       {id: 'go-activity', group: 'Go to', title: 'Activity: runs, plans and schedules', hint: 'Ctrl+2', run: go('activity')},
       {id: 'go-files', group: 'Go to', title: 'Files', hint: 'Ctrl+3', run: go('files')},
-      {id: 'go-tools', group: 'Go to', title: 'Tools: servers, skills and marketplace', hint: 'Ctrl+4', run: go('tools')},
-      {id: 'go-history', group: 'Go to', title: 'History', hint: 'Ctrl+5', run: go('history')},
+      {id: 'go-visuals', group: 'Go to', title: 'Visuals: charts, pictures, pages and polls NullBot showed you', keywords: 'visualizations visualize poll chart diagram', hint: 'Ctrl+4', run: go('visuals')},
+      {id: 'go-tools', group: 'Go to', title: 'Tools: servers, skills and marketplace', hint: 'Ctrl+5', run: go('tools')},
+      {id: 'go-history', group: 'Go to', title: 'History', hint: 'Ctrl+6', run: go('history')},
       {id: 'go-projects', group: 'Settings', title: 'Projects and permissions', keywords: 'folders access workspace', run: section('projects')},
       {id: 'go-models', group: 'Settings', title: 'Models', keywords: 'provider openai anthropic codex', run: section('models')},
       {id: 'go-accounts', group: 'Settings', title: 'Accounts and API keys', keywords: 'keys credentials gmail', run: section('accounts')},
@@ -72,6 +75,7 @@ function useCommands(): Command[] {
         },
       })),
     ];
+    if (waiting) list.unshift({id: 'visual-waiting', group: 'Run', title: `Answer “${waiting.title}”`, keywords: 'visual waiting poll', run: () => openVisual(waiting)});
     if (phase === 'working' || phase === 'paused' || phase === 'stopping') list.unshift({id: 'stop-all', group: 'Run', title: 'Stop everything now', keywords: 'cancel emergency halt kill', run: () => stopEverything()});
     if (phase === 'working' || phase === 'paused') list.unshift({id: 'stop', group: 'Run', title: 'Stop after this step', keywords: 'wrap up end', run: () => stopRun()});
     if (phase === 'working') list.unshift({id: 'pause', group: 'Run', title: 'Pause the current request', run: () => pauseRuns()});
@@ -99,7 +103,7 @@ function useCommands(): Command[] {
       }});
     }
     return list;
-  }, [projects, mcp, phase, queued, config]);
+  }, [projects, mcp, phase, queued, config, waiting]);
 }
 
 function score(command: Command, query: string): number {
