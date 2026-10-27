@@ -561,12 +561,14 @@ function MarketTab() {
             {packages.map(pkg => (
               <tr key={pkg.id}>
                 <td>
-                  <div className="pkg-name"><Package size={14} aria-hidden="true" /><strong>{pkg.name}</strong>{pkg.version && <span className="faint num">{pkg.version}</span>}{pkg.installed && <StatusTag status="installed" label="Installed" />}</div>
+                  <div className="pkg-name"><Package size={14} aria-hidden="true" /><strong>{pkg.name}</strong>{(pkg.release_tag || pkg.version) && <span className="faint num">{pkg.release_tag || pkg.version}</span>}{(pkg.kind === 'skill_pack' || pkg.kind === 'skill') && <span className="tag">Skill</span>}{pkg.installed && <StatusTag status="installed" label="Installed" />}</div>
                   {pkg.description && <p className="muted pkg-desc">{pkg.description}</p>}
                 </td>
-                <td className="pkg-perms">{(pkg.permissions || []).map(p => <span key={p} className="tag">{p}</span>)}</td>
+                <td><div className="pkg-perms">{(pkg.permissions || []).map(p => <span key={p} className="tag" title={p}>{marketPermission(p)}</span>)}</div></td>
                 <td className="pkg-action">
-                  <button className="btn btn-sm" disabled={!!installing} onClick={() => void install(pkg)}>{installing === pkg.id ? <span className="spinner" /> : null}{pkg.installed ? 'Reinstall' : 'Install'}</button>
+                  {pkg.status === 'unreleased' && !pkg.installed
+                    ? <span className="faint" title="This package has no release to install yet">Not released yet</span>
+                    : <button className="btn btn-sm" disabled={!!installing} onClick={() => void install(pkg)}>{installing === pkg.id ? <span className="spinner" /> : null}{pkg.installed ? 'Reinstall' : 'Install'}</button>}
                 </td>
               </tr>
             ))}
@@ -591,4 +593,16 @@ function MarketTab() {
       </div>
     </div>
   );
+}
+
+// What a marketplace package may do, in plain words.
+const marketPermissions: Record<string, string> = {
+  workspace_read: 'read project files', workspace_write: 'write project files', command_execute: 'run commands',
+  document_parse: 'parse documents', image_generation: 'generate images', network_fetch: 'use the internet',
+  browser_control: 'control a browser', skill_install: 'add a skill', service_credentials: 'use saved account keys',
+  email_read: 'read email', email_send: 'send email', drive_read: 'read cloud drives',
+  message_read: 'read messages', message_send: 'send messages',
+};
+function marketPermission(id: string): string {
+  return marketPermissions[id] || id.replace(/_/g, ' ');
 }

@@ -207,7 +207,7 @@ export type HistorySearchResult = {hits: HistoryHit[]; more: boolean; sessions_s
 export type UsageTotals = {requests?: number; input_tokens?: number; output_tokens?: number; total_tokens?: number; cached_input_tokens?: number; reasoning_output_tokens?: number; cost_usd?: number; estimated?: number};
 export type UsageReport = {records: any[]; totals: UsageTotals; buckets: {key: string; totals: UsageTotals}[]; markdown: string; path?: string};
 
-export type MarketPackage = {id: string; name: string; description?: string; kind?: string; status?: string; installed?: boolean; permissions?: string[]; category?: string; version?: string};
+export type MarketPackage = {id: string; name: string; description?: string; kind?: string; status?: string; installed?: boolean; permissions?: string[]; category?: string; version?: string; release_tag?: string; error?: string};
 export type MarketState = {packages: MarketPackage[]; local_servers?: {id: string; name: string; path: string; description: string}[]; dir?: string; error?: string};
 
 export type SubmissionJob = {id: string; request_id?: string; mode: string; input?: string; status: string; error?: string; reply?: {message?: string; data?: any}};
