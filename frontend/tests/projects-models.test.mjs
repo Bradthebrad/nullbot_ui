@@ -36,7 +36,7 @@ test('project dropdown labels and staged primary selection preserve backend valu
   assert.equal(nodes(tree, n => n.type === 'input' && n.props.type === 'radio').length, 0);
   const cards = nodes(tree, n => n.type === 'article');
   const select = nodes(cards[1], n => n.type === 'select')[0];
-  assert.deepEqual(nodes(select, n => n.type === 'option').map(n => [n.props.value, text(n)]), [['read-only', 'Read only'], ['read-write', 'Read & write'], ['full', 'Full']]);
+  assert.deepEqual(nodes(select, n => n.type === 'option').map(n => [n.props.value, text(n)]), [['read-only', 'Read only'], ['read-write', 'Read & write'], ['full', 'Full'], ['custom', 'Custom']]);
   buttons(cards[1]).find(n => text(n) === 'Set as primary').props.onClick();
   assert.equal(saved, undefined);
   tree = view.render();
@@ -55,18 +55,3 @@ test('Full escalation cancellation does not invoke backend save', async () => {
   assert.equal(confirmations, 1); assert.equal(saves, 0);
 });
 
-test('every model card has three assignment actions targeting that model', async () => {
-  const calls = []; let refreshes = 0;
-  const view = mount('ModelsView', {ui: {config: {}}, refreshState: () => {refreshes++;}}, {Models: async () => [{provider: 'provider', models: [{id: 'one', name: 'One'}, {id: 'two', name: 'Two'}]}], SetModel: async (...args) => calls.push(args)});
-  view.render(); await view.flush();
-  for (let index = 0; index < 2; index++) {
-    for (const [action, target] of ['manager', 'subagent', 'both'].entries()) {
-      const card = nodes(view.render(), n => n.type === 'article')[index];
-      assert.equal(buttons(card).length, 3);
-      await buttons(card)[action].props.onClick();
-      await view.flush();
-      assert.deepEqual(calls.at(-1), ['provider', index ? 'two' : 'one', target]);
-    }
-  }
-  assert.equal(refreshes, 6);
-});

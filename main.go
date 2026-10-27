@@ -17,20 +17,26 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:     "NullBot UI",
+		Title:     "NullBot",
 		Width:     1440,
 		Height:    920,
-		MinWidth:  1180,
-		MinHeight: 760,
+		MinWidth:  960,
+		MinHeight: 640,
 		AssetServer: &assetserver.Options{
-			Assets: assets,
+			Assets:  assets,
+			Handler: app.assetHandler(),
 		},
-		BackgroundColour: &options.RGBA{R: 5, G: 7, B: 11, A: 1},
+		BackgroundColour: &options.RGBA{R: 14, G: 15, B: 17, A: 1},
+		SingleInstanceLock: &options.SingleInstanceLock{
+			UniqueId:               "nullbot-ui-1f6c4b2e-desktop",
+			OnSecondInstanceLaunch: app.onSecondInstance,
+		},
 		DragAndDrop: &options.DragAndDrop{
 			EnableFileDrop:     true,
 			DisableWebViewDrop: true,
 		},
-		OnStartup: app.startup,
+		OnStartup:  app.startup,
+		OnShutdown: app.shutdown,
 		Bind: []interface{}{
 			app,
 		},

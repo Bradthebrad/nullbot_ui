@@ -37,3 +37,7 @@ tmp/
 Thumbs.db
 .vscode/
 .idea/
+
+# Local Go build output
+/nullbot_ui
+/nullbot_ui.exe

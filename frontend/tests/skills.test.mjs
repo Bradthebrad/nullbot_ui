@@ -28,14 +28,14 @@ test('matches are path-deduplicated and capped, name match ranks before descript
   assert.equal(new Set(matches.map(x => x.path)).size, 5);
 });
 test('settings owns opt-in and sending uses exactly the previewed automatic paths', () => {
-  const app = fs.readFileSync(path('App.tsx'), 'utf8');
-  const chat = app.slice(app.indexOf('function ChatView('), app.indexOf('function LiveActivity('));
-  assert.doesNotMatch(chat, /Suggest matching skills|Add skill context|selectedSkills/);
-  assert.match(app, /update\('ui.suggest_matching_skills', event.target.checked\)/);
-  assert.match(chat, /\.\.\.skillContext.paths/);
-  assert.match(chat, /matches=\{skillContext.matches\}/);
-  assert.match(chat, /!input.trim\(\).startsWith\('\/'\)/);
-  assert.doesNotMatch(chat, /alsoMode|setAlsoMode/);
+  const composer = fs.readFileSync(path('features/chat/Composer.tsx'), 'utf8');
+  const settings = fs.readFileSync(path('features/settings/AgentSettings.tsx'), 'utf8');
+  assert.doesNotMatch(composer, /Suggest matching skills|Add skill context|selectedSkills/);
+  assert.match(settings, /set\('ui.suggest_matching_skills', v\)/);
+  assert.match(composer, /\.\.\.skillContext.paths/);
+  assert.match(composer, /matches=\{skillContext.matches\}/);
+  assert.match(composer, /!input.trim\(\).startsWith\('\/'\)/);
+  assert.doesNotMatch(composer, /alsoMode|setAlsoMode/);
 });
 test('real textarea and reduced-motion/forced-color support remain available', () => {
   assert.match(fs.readFileSync(path('SkillComposer.tsx'), 'utf8'), /<textarea/);

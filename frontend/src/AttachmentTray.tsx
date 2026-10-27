@@ -17,7 +17,7 @@ export default function AttachmentTray({attachments, onRemove, readonly = false}
           {url ? <button type="button" className="attachment-thumbnail" onClick={() => setPreview(item)} aria-label={`Preview ${name}`}><img src={url} alt="" /></button> : <span className="attachment-file-icon" aria-hidden="true">▤</span>}
           <div className="attachment-details">
             <strong title={name}>{name}</strong>
-            <span role="status">{status === 'preparing' ? 'Preparing…' : status === 'failed' ? 'Failed' : 'Ready'}{item.size !== undefined ? ` · ${(item.size / 1024).toFixed(1)} KiB` : ''}</span>
+            <span role="status">{status === 'preparing' ? 'Preparing…' : status === 'failed' ? 'Failed' : 'Ready'}{item.size !== undefined ? `, ${(item.size / 1024).toFixed(1)} KiB` : ''}</span>
             {item.error && <span className="attachment-error">{item.error}</span>}
           </div>
           {!readonly && onRemove && item.id && <button type="button" className="attachment-remove" onClick={() => onRemove(item.id!)} aria-label={`Remove ${name}`} title="Remove attachment">×</button>}

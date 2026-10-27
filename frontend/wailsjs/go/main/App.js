@@ -58,6 +58,14 @@ export function CompletePath(arg1, arg2) {
   return window['go']['main']['App']['CompletePath'](arg1, arg2);
 }
 
+export function ContextWindow(arg1, arg2) {
+  return window['go']['main']['App']['ContextWindow'](arg1, arg2);
+}
+
+export function CopyPaths(arg1) {
+  return window['go']['main']['App']['CopyPaths'](arg1);
+}
+
 export function CreateDirectory(arg1) {
   return window['go']['main']['App']['CreateDirectory'](arg1);
 }
@@ -86,6 +94,14 @@ export function DeleteScheduledTask(arg1) {
   return window['go']['main']['App']['DeleteScheduledTask'](arg1);
 }
 
+export function DeleteServiceAccount(arg1) {
+  return window['go']['main']['App']['DeleteServiceAccount'](arg1);
+}
+
+export function DeleteVisualization(arg1) {
+  return window['go']['main']['App']['DeleteVisualization'](arg1);
+}
+
 export function DiscoverMCPTools(arg1) {
   return window['go']['main']['App']['DiscoverMCPTools'](arg1);
 }
@@ -102,8 +118,20 @@ export function ListFiles(arg1) {
   return window['go']['main']['App']['ListFiles'](arg1);
 }
 
+export function LiveVisualizations() {
+  return window['go']['main']['App']['LiveVisualizations']();
+}
+
 export function LoadSession(arg1, arg2) {
   return window['go']['main']['App']['LoadSession'](arg1, arg2);
+}
+
+export function MCPServer(arg1) {
+  return window['go']['main']['App']['MCPServer'](arg1);
+}
+
+export function MCPServers() {
+  return window['go']['main']['App']['MCPServers']();
 }
 
 export function MCPState() {
@@ -114,12 +142,32 @@ export function Marketplace(arg1) {
   return window['go']['main']['App']['Marketplace'](arg1);
 }
 
+export function ModelCatalog(arg1) {
+  return window['go']['main']['App']['ModelCatalog'](arg1);
+}
+
 export function Models() {
   return window['go']['main']['App']['Models']();
 }
 
 export function OpenCodexLogin() {
   return window['go']['main']['App']['OpenCodexLogin']();
+}
+
+export function OpenExternal(arg1) {
+  return window['go']['main']['App']['OpenExternal'](arg1);
+}
+
+export function OpenPath(arg1) {
+  return window['go']['main']['App']['OpenPath'](arg1);
+}
+
+export function OpenVisualization(arg1, arg2) {
+  return window['go']['main']['App']['OpenVisualization'](arg1, arg2);
+}
+
+export function OpenWith(arg1) {
+  return window['go']['main']['App']['OpenWith'](arg1);
 }
 
 export function Pause() {
@@ -158,6 +206,10 @@ export function ReadSkill(arg1) {
   return window['go']['main']['App']['ReadSkill'](arg1);
 }
 
+export function RecordVisualEvents(arg1, arg2) {
+  return window['go']['main']['App']['RecordVisualEvents'](arg1, arg2);
+}
+
 export function RemoveQueuedChat(arg1) {
   return window['go']['main']['App']['RemoveQueuedChat'](arg1);
 }
@@ -166,8 +218,24 @@ export function RenamePath(arg1) {
   return window['go']['main']['App']['RenamePath'](arg1);
 }
 
+export function RespondVisualization(arg1) {
+  return window['go']['main']['App']['RespondVisualization'](arg1);
+}
+
+export function RestartMCPServer(arg1) {
+  return window['go']['main']['App']['RestartMCPServer'](arg1);
+}
+
 export function Resume() {
   return window['go']['main']['App']['Resume']();
+}
+
+export function RevealPath(arg1) {
+  return window['go']['main']['App']['RevealPath'](arg1);
+}
+
+export function RevealVisualization(arg1) {
+  return window['go']['main']['App']['RevealVisualization'](arg1);
 }
 
 export function RunScheduledTaskNow(arg1) {
@@ -202,6 +270,10 @@ export function SavePrompts(arg1) {
   return window['go']['main']['App']['SavePrompts'](arg1);
 }
 
+export function SaveServiceAccount(arg1) {
+  return window['go']['main']['App']['SaveServiceAccount'](arg1);
+}
+
 export function SaveSkill(arg1) {
   return window['go']['main']['App']['SaveSkill'](arg1);
 }
@@ -214,24 +286,64 @@ export function ScheduledTasks() {
   return window['go']['main']['App']['ScheduledTasks']();
 }
 
+export function SearchFiles(arg1) {
+  return window['go']['main']['App']['SearchFiles'](arg1);
+}
+
+export function SearchHistory(arg1) {
+  return window['go']['main']['App']['SearchHistory'](arg1);
+}
+
 export function SearchSessions(arg1) {
   return window['go']['main']['App']['SearchSessions'](arg1);
+}
+
+export function SearchSessionsWith(arg1) {
+  return window['go']['main']['App']['SearchSessionsWith'](arg1);
 }
 
 export function SendAlso(arg1) {
   return window['go']['main']['App']['SendAlso'](arg1);
 }
 
+export function ServiceAccountCatalog() {
+  return window['go']['main']['App']['ServiceAccountCatalog']();
+}
+
+export function ServiceAccountStatus() {
+  return window['go']['main']['App']['ServiceAccountStatus']();
+}
+
+export function SessionEntries(arg1, arg2) {
+  return window['go']['main']['App']['SessionEntries'](arg1, arg2);
+}
+
 export function Sessions(arg1) {
   return window['go']['main']['App']['Sessions'](arg1);
+}
+
+export function SetAppearance(arg1, arg2) {
+  return window['go']['main']['App']['SetAppearance'](arg1, arg2);
 }
 
 export function SetBotName(arg1) {
   return window['go']['main']['App']['SetBotName'](arg1);
 }
 
+export function SetContextWindow(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetContextWindow'](arg1, arg2, arg3);
+}
+
+export function SetMCPToolPolicy(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetMCPToolPolicy'](arg1, arg2, arg3);
+}
+
 export function SetModel(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetModel'](arg1, arg2, arg3);
+}
+
+export function SetPrimaryProject(arg1) {
+  return window['go']['main']['App']['SetPrimaryProject'](arg1);
 }
 
 export function SetTheme(arg1) {
@@ -246,8 +358,28 @@ export function Skills() {
   return window['go']['main']['App']['Skills']();
 }
 
+export function StartMCPServer(arg1) {
+  return window['go']['main']['App']['StartMCPServer'](arg1);
+}
+
 export function State() {
   return window['go']['main']['App']['State']();
+}
+
+export function SteerSubagent(arg1, arg2) {
+  return window['go']['main']['App']['SteerSubagent'](arg1, arg2);
+}
+
+export function StopEverything() {
+  return window['go']['main']['App']['StopEverything']();
+}
+
+export function StopMCPServer(arg1) {
+  return window['go']['main']['App']['StopMCPServer'](arg1);
+}
+
+export function StopRun(arg1) {
+  return window['go']['main']['App']['StopRun'](arg1);
 }
 
 export function Submit(arg1) {
@@ -276,4 +408,24 @@ export function ToggleMCPServer(arg1, arg2) {
 
 export function Usage() {
   return window['go']['main']['App']['Usage']();
+}
+
+export function UsageSummary() {
+  return window['go']['main']['App']['UsageSummary']();
+}
+
+export function VisualEvents(arg1, arg2) {
+  return window['go']['main']['App']['VisualEvents'](arg1, arg2);
+}
+
+export function VisualPage(arg1, arg2, arg3) {
+  return window['go']['main']['App']['VisualPage'](arg1, arg2, arg3);
+}
+
+export function Visualization(arg1) {
+  return window['go']['main']['App']['Visualization'](arg1);
+}
+
+export function Visualizations(arg1) {
+  return window['go']['main']['App']['Visualizations'](arg1);
 }

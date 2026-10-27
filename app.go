@@ -3,15 +3,12 @@ package main
 import (
 	"archive/zip"
 	"bufio"
-	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/csv"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io"
-	"mime"
 	"os"
 	"path/filepath"
 	"sort"
@@ -19,17 +16,16 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
+	"github.com/wailsapp/wails/v2/pkg/options"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
 	nullbot "github.com/Bradthebrad/nullbot/pkg/app"
-	"github.com/Bradthebrad/tinychain/mcp"
 )
 
 const (
-	maxPreviewBytes = 2 * 1024 * 1024
-	maxDataURLBytes = 14 * 1024 * 1024
+	maxPreviewBytes       = 2 * 1024 * 1024
+	maxStreamPreviewBytes = 512 * 1024 * 1024
 )
 
 type App struct {
@@ -39,6 +35,12 @@ type App struct {
 	submitMu     sync.Mutex
 	rootDir      string
 	activityStop func()
+	changesStop  func()
+	batcher      *activityBatcher
+	changes      *changeDebouncer
+	localFiles   *localFiles
+	visuals      *visualSites
+	visualOnce   sync.Once
 }
 
 type UIState struct {
@@ -47,6 +49,9 @@ type UIState struct {
 	Keys        MaskedAPIKeys             `json:"keys"`
 	Runtime     map[string]any            `json:"runtime"`
 	Models      []nullbot.ModelGroup      `json:"models"`
+	ModelsFresh bool                      `json:"models_fresh"`
+	MCP         []nullbot.MCPServerStatus `json:"mcp"`
+	Projects    ProjectsState             `json:"projects"`
 	Themes      []ThemePalette            `json:"themes"`
 	Usage       nullbot.UsageSnapshot     `json:"usage"`
 	Tasks       []nullbot.AgentTask       `json:"tasks"`
@@ -123,10 +128,24 @@ type FilePreview struct {
 	Editable  bool       `json:"editable"`
 	Truncated bool       `json:"truncated"`
 	Content   string     `json:"content,omitempty"`
-	DataURL   string     `json:"data_url,omitempty"`
+	DataURL   string     `json:"data_url,omitempty"` // a /__local/ URL for images and PDFs
+	URL       string     `json:"url,omitempty"`
 	Rows      [][]string `json:"rows,omitempty"`
 	Headers   []string   `json:"headers,omitempty"`
 	Error     string     `json:"error,omitempty"`
+	Modified  time.Time  `json:"modified"`
+	// Formatted is JSON indented for reading, when the file isn't already.
+	Formatted string `json:"formatted,omitempty"`
+	// Entries lists an archive's files; Count is how many it has in all.
+	Entries []ArchiveEntry `json:"entries,omitempty"`
+	Count   int            `json:"count,omitempty"`
+	// Hex is a dump of the start of a binary file.
+	Hex string `json:"hex,omitempty"`
+	// Encoding is how a text file is stored: utf-8, utf-8-bom, utf-16le,
+	// utf-16be or windows-1252.
+	Encoding string `json:"encoding,omitempty"`
+	// ReadOnlyReason says why an otherwise editable file can't be edited.
+	ReadOnlyReason string `json:"read_only_reason,omitempty"`
 }
 
 type SaveFileRequest struct {
@@ -195,13 +214,17 @@ type MCPInput struct {
 	Command   string            `json:"command"`
 	Args      []string          `json:"args"`
 	Env       map[string]string `json:"env"`
+	Headers   map[string]string `json:"headers"`
 	Enabled   bool              `json:"enabled"`
 }
 
 type MCPToolInfo struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	InputSchema map[string]any `json:"input_schema,omitempty"`
+	Name        string                  `json:"name"`
+	Title       string                  `json:"title,omitempty"`
+	Description string                  `json:"description"`
+	InputSchema map[string]any          `json:"input_schema,omitempty"`
+	Requirement nullbot.ToolRequirement `json:"requirement"`
+	Policy      string                  `json:"policy,omitempty"`
 }
 
 type PromptDefaults struct {
@@ -213,8 +236,12 @@ type SessionSummary struct {
 	SessionID string    `json:"session_id"`
 	Path      string    `json:"path"`
 	Messages  int       `json:"messages"`
+	Title     string    `json:"title,omitempty"`
 	Preview   string    `json:"preview"`
 	Modified  time.Time `json:"modified"`
+	// Matches and Snippet are set by SearchSessions.
+	Matches int    `json:"matches,omitempty"`
+	Snippet string `json:"snippet,omitempty"`
 }
 
 type persistedMessage struct {
@@ -264,14 +291,17 @@ func NewApp() *App {
 	cfg, err := nullbot.LoadOrInitConfig()
 	cwd, _ := os.Getwd()
 	a := &App{
-		initErr: err,
-		rootDir: filepath.Dir(cwd),
+		initErr:    err,
+		rootDir:    filepath.Dir(cwd),
+		localFiles: newLocalFiles(),
 	}
 	if err == nil {
 		a.bot = nullbot.New(cfg)
 	} else {
 		a.bot = nullbot.New(nullbot.DefaultConfig())
 	}
+	// This app can show visuals, so the agent gets the visualize tools.
+	a.bot.EnableVisuals()
 	return a
 }
 
@@ -279,19 +309,52 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	if a.activityStop == nil && a.bot != nil {
 		a.bot.StartScheduler()
+		// Activity reaches the UI as arrays: streamed fragments are merged and
+		// flushed about 30 times a second; everything else flushes at once.
+		a.batcher = newActivityBatcher(func(batch []nullbot.ActivityRecord) { a.emit("activity", batch) })
 		a.activityStop = a.bot.SubscribeActivity(func(record nullbot.ActivityRecord) {
-			a.emit("activity", record)
+			a.batcher.add(record)
 			a.publishSubmissionCompletion(record)
-			if record.Kind == "on_llm_new_token" || record.Kind == "on_llm_reasoning" || record.Kind == "on_chat_model_start" || record.Kind == "on_llm_end" || record.Kind == "on_llm_error" {
-				a.emit("agent:stream", record)
-			}
 		})
+		a.changes = newChangeDebouncer(a.publishChange)
+		a.changesStop = a.bot.SubscribeChanges(a.changes.notify)
 	}
 	if a.initErr != nil {
 		a.emit("status", map[string]string{"message": a.initErr.Error()})
 	}
 }
 
+// shutdown stops background work and every MCP server process.
+func (a *App) shutdown(ctx context.Context) {
+	if a.activityStop != nil {
+		a.activityStop()
+		a.activityStop = nil
+	}
+	if a.changesStop != nil {
+		a.changesStop()
+		a.changesStop = nil
+	}
+	if a.changes != nil {
+		a.changes.stop()
+	}
+	if a.bot != nil {
+		a.bot.Shutdown()
+	}
+}
+
+// onSecondInstance brings the existing window forward instead of starting a
+// second copy of the app (and a second set of MCP servers).
+func (a *App) onSecondInstance(options.SecondInstanceData) {
+	if a.ctx == nil {
+		return
+	}
+	wailsRuntime.WindowUnminimise(a.ctx)
+	wailsRuntime.WindowShow(a.ctx)
+}
+
+// State returns everything the UI needs to render, without network calls:
+// the model catalog comes from cache (ModelCatalog fetches), usage is a
+// summary, and MCP servers report their live state.
 func (a *App) State() (UIState, error) {
 	if a.initErr != nil {
 		return UIState{}, a.initErr
@@ -301,15 +364,18 @@ func (a *App) State() (UIState, error) {
 	keys := a.bot.APIKeys()
 	market := a.marketState(false)
 	files, _ := a.listFiles(config.WorkspaceDir)
-	models := nullbot.DiscoverModelGroups(context.Background(), config)
+	models, fresh := nullbot.PeekModelGroups(config)
 	return UIState{
 		Reply:       reply,
 		Config:      config,
 		Keys:        maskKeys(keys),
 		Runtime:     nullbot.RuntimeStatus(config),
 		Models:      models,
+		ModelsFresh: fresh,
+		MCP:         a.bot.MCPStatus(false),
+		Projects:    a.Projects(),
 		Themes:      themeCatalog(),
-		Usage:       a.bot.UsageSnapshot(),
+		Usage:       a.bot.UsageSummary(),
 		Tasks:       a.bot.TaskSnapshots(),
 		Scheduled:   a.bot.ScheduledTasks(),
 		Thoughts:    a.bot.ThoughtSnapshots(),
@@ -333,20 +399,46 @@ func (a *App) SendAlso(question string) (nullbot.Reply, error) {
 	return a.SubmitChatRequest(ChatRequest{Mode: "also", Text: question})
 }
 
+// Pause holds every running agent at its next step and holds the queue.
+// Steps already under way finish first.
 func (a *App) Pause() (nullbot.Reply, error) {
-	a.bot.RequestPause()
-	reply := a.bot.State()
-	reply.Command = "/pause"
-	reply.Message = "Pause requested. Queued messages are held until Resume."
-	reply.Activity = nil
-	a.emit("reply", reply)
-	return reply, nil
+	a.bot.PauseRuns()
+	return a.runReply("Pausing. Steps already under way finish, then everything waits until you resume.")
 }
 
+// Resume lets paused agents carry on and starts held requests.
 func (a *App) Resume() (nullbot.Reply, error) {
-	a.bot.Resume()
+	a.bot.ResumeRuns()
+	return a.runReply("Resumed.")
+}
+
+// StopRun asks the running request to wrap up: no new tool calls, and an
+// answer saying what was done and what is left. Queued requests continue.
+// targetID is the request the person was looking at; if a different one is
+// running by the time this arrives, nothing stops. Empty means whichever
+// request is running.
+func (a *App) StopRun(targetID string) (nullbot.Reply, error) {
+	if err := a.bot.StopRequest(targetID); err != nil {
+		return nullbot.Reply{}, err
+	}
+	return a.runReply("Stopping. The current step finishes, then the request wraps up.")
+}
+
+// StopEverything cancels all running work now and holds queued requests.
+func (a *App) StopEverything() (nullbot.Reply, error) {
+	a.bot.StopEverything()
+	return a.runReply("Stopped everything. Queued requests wait until you resume.")
+}
+
+// SteerSubagent sends guidance to one running subagent.
+func (a *App) SteerSubagent(taskID, text string) error {
+	return a.bot.SteerTask(taskID, text)
+}
+
+func (a *App) runReply(message string) (nullbot.Reply, error) {
 	reply := a.bot.State()
-	reply.Message = "Resumed. The next active run will proceed normally."
+	reply.Message = message
+	reply.Activity = nil
 	a.emit("reply", reply)
 	return reply, nil
 }
@@ -359,33 +451,52 @@ func (a *App) Analyze(focus string) (nullbot.Reply, error) {
 	return a.startBackgroundSubmit(cmd, "Workspace analysis")
 }
 
+// CompactConversation summarizes the conversation with the model and adds
+// the summary to the history. Later requests start from it; the messages
+// before it stay in the chat and on disk.
 func (a *App) CompactConversation(focus string) (nullbot.Reply, error) {
-	before := a.bot.State().History
-	cmd := "/compact"
-	if strings.TrimSpace(focus) != "" {
-		cmd += " " + strings.TrimSpace(focus)
+	if a.initErr != nil {
+		return nullbot.Reply{}, a.initErr
 	}
-	reply, err := a.submit(cmd)
+	if a.bot == nil {
+		return nullbot.Reply{}, fmt.Errorf("chat service is not initialized")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	result, err := a.bot.CompactConversation(ctx, strings.TrimSpace(focus))
 	if err != nil {
-		return reply, err
-	}
-	summary := strings.TrimSpace(reply.Message)
-	if summary == "" {
-		summary = "Conversation compacted."
-	}
-	if !a.bot.TryReplaceHistoryIfUnchanged(before, []nullbot.Message{{
-		Role:    "assistant",
-		Content: "Conversation compacted.\n\n" + summary,
-		Time:    time.Now().UTC(),
-	}}) {
-		return nullbot.Reply{}, fmt.Errorf("conversation changed or submissions are active; compact again when idle")
+		return nullbot.Reply{}, err
 	}
 	updated := a.bot.State()
-	updated.Data["history_replace"] = true
-	updated.Message = "Conversation compacted."
+	if updated.Data == nil {
+		updated.Data = map[string]any{}
+	}
+	updated.Data["compaction"] = result.Report
+	updated.Message = fmt.Sprintf("Compacted %d messages, from about %d to %d tokens.", result.Report.Summarized, result.Report.BeforeTokens, result.Report.AfterTokens)
 	updated.OpenPanel = "chat"
 	a.emit("reply", updated)
 	return updated, nil
+}
+
+// SetContextWindow overrides the context size used for a model. Zero
+// removes the override.
+func (a *App) SetContextWindow(provider, model string, tokens int) (UIState, error) {
+	if a.bot == nil {
+		return UIState{}, fmt.Errorf("chat service is not initialized")
+	}
+	if err := a.bot.SetContextWindowOverride(provider, model, tokens); err != nil {
+		return UIState{}, err
+	}
+	return a.State()
+}
+
+// ContextWindow reports the context size a model gets without your
+// override, and where that size came from.
+func (a *App) ContextWindow(provider, model string) nullbot.ContextWindow {
+	if a.bot == nil {
+		return nullbot.ContextWindow{}
+	}
+	return a.bot.BaseContextWindowFor(provider, model)
 }
 
 func (a *App) submit(input string) (nullbot.Reply, error) {
@@ -652,12 +763,18 @@ func (a *App) PromptDefaults() (PromptDefaults, error) {
 }
 
 func (a *App) Models() ([]nullbot.ModelGroup, error) {
-	return nullbot.DiscoverModelGroups(context.Background(), a.bot.Config()), nil
+	return a.ModelCatalog(false), nil
 }
 
+// ListFiles lists a folder inside a project (or a file's folder).
 func (a *App) ListFiles(path string) (FileBrowser, error) {
+	config := a.bot.Config()
 	if strings.TrimSpace(path) == "" {
-		path = a.bot.Config().WorkspaceDir
+		path = config.WorkspaceDir
+	}
+	if _, err := checkUIProjectPath(config, path, false, false); err != nil {
+		workspace, _ := filepath.Abs(config.WorkspaceDir)
+		return FileBrowser{Workspace: workspace, Current: path, Error: err.Error()}, err
 	}
 	return a.listFiles(path)
 }
@@ -678,6 +795,9 @@ func (a *App) CompletePath(input, baseDir string) ([]PathSuggestion, error) {
 		target = filepath.Join(base, target)
 	}
 	target = filepath.Clean(target)
+	if !nullbot.PathLexicallyInProjects(config, target) && !nullbot.PathLexicallyInProjects(config, filepath.Dir(target)) {
+		return nil, nil
+	}
 
 	parent := target
 	prefix := ""
@@ -690,15 +810,17 @@ func (a *App) CompletePath(input, baseDir string) ([]PathSuggestion, error) {
 		}
 	}
 
+	// Only complete inside projects: refuse other paths (including UNC paths)
+	// before touching the filesystem.
+	if !nullbot.PathLexicallyInProjects(config, parent) {
+		return nil, nil
+	}
 	suggestions, err := readPathSuggestions(parent, prefix)
 	if err != nil {
 		return nil, err
 	}
 	if len(suggestions) == 0 && isBareRelativePath(input) {
 		fallbackRoots := []string{config.WorkspaceDir}
-		if home, err := os.UserHomeDir(); err == nil {
-			fallbackRoots = append(fallbackRoots, home)
-		}
 		for _, root := range fallbackRoots {
 			root, err := filepath.Abs(filepath.Clean(root))
 			if err != nil || samePath(root, parent) {
@@ -740,102 +862,32 @@ func (a *App) SetWorkingDirectory(path string) (FileBrowser, error) {
 	return a.listFiles(path)
 }
 
+// PreviewFile previews a file inside a project.
 func (a *App) PreviewFile(path string) (FilePreview, error) {
-	path, err := filepath.Abs(filepath.Clean(path))
-	if err != nil {
+	if _, err := checkUIProjectPath(a.bot.Config(), path, false, false); err != nil {
 		return FilePreview{}, err
 	}
-	info, err := os.Stat(path)
-	if err != nil {
-		return FilePreview{}, err
-	}
-	if info.IsDir() {
-		return FilePreview{}, fmt.Errorf("%s is a directory", path)
-	}
-	kind := fileKind(path)
-	ext := strings.ToLower(filepath.Ext(path))
-	mimeType := mime.TypeByExtension(ext)
-	if mimeType == "" {
-		mimeType = "application/octet-stream"
-	}
-	preview := FilePreview{
-		Path:     path,
-		Name:     filepath.Base(path),
-		Kind:     kind,
-		MIME:     mimeType,
-		Size:     info.Size(),
-		Editable: isEditableKind(kind, ext, info.Size()),
-	}
-	switch kind {
-	case "image":
-		if info.Size() > maxDataURLBytes {
-			preview.Error = "Image is too large for inline preview."
-			return preview, nil
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return preview, err
-		}
-		preview.DataURL = "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(data)
-	case "pdf":
-		if info.Size() > maxDataURLBytes {
-			preview.Error = "PDF is too large for inline preview. Use Open to view it externally."
-			return preview, nil
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return preview, err
-		}
-		preview.DataURL = "data:application/pdf;base64," + base64.StdEncoding.EncodeToString(data)
-	case "csv":
-		content, truncated, err := readTextPreview(path)
-		if err != nil {
-			return preview, err
-		}
-		preview.Content = content
-		preview.Truncated = truncated
-		preview.Headers, preview.Rows = parseCSVRows(content)
-	case "xlsx":
-		headers, rows, err := parseXLSXPreview(path)
-		if err != nil {
-			preview.Error = err.Error()
-			return preview, nil
-		}
-		preview.Headers = headers
-		preview.Rows = rows
-	case "docx":
-		text, err := extractDocxText(path)
-		if err != nil {
-			preview.Error = err.Error()
-			return preview, nil
-		}
-		preview.Content = truncateRunes(text, 60000)
-		preview.Truncated = len([]rune(text)) > 60000
-	case "markdown", "text", "code", "data":
-		content, truncated, err := readTextPreview(path)
-		if err != nil {
-			return preview, err
-		}
-		preview.Content = content
-		preview.Truncated = truncated
-	default:
-		content, truncated, err := readTextPreview(path)
-		if err == nil && utf8.ValidString(content) {
-			preview.Kind = "text"
-			preview.Editable = info.Size() <= maxPreviewBytes
-			preview.Content = content
-			preview.Truncated = truncated
-		} else {
-			preview.Error = "No inline preview is available for this binary file."
-		}
-	}
-	return preview, nil
+	return a.previewFile(path)
 }
 
 // checkUIProjectPath fails closed for irregular ancestors (notably Windows
 // junctions, which current Go EvalSymlinks does not resolve), then delegates
 // canonical path and overlapping-grant authorization to the shared policy.
 func checkUIProjectPath(config nullbot.Config, path string, write, tree bool) (string, error) {
+	capability := nullbot.CapRead
+	if write {
+		capability = nullbot.CapWrite
+	}
+	return checkUIProjectAccess(config, path, capability, tree)
+}
+
+// checkUIProjectAccess is checkUIProjectPath for one capability. Paths outside
+// every project are refused before any filesystem access, so a link to
+// \\host\share in a bot reply can't make the app open a network connection.
+func checkUIProjectAccess(config nullbot.Config, path string, capability nullbot.Capability, tree bool) (string, error) {
+	if !nullbot.PathLexicallyInProjects(config, path) {
+		return "", fmt.Errorf("path is outside configured projects")
+	}
 	checkAncestors := func(path string) error {
 		abs, err := filepath.Abs(path)
 		if err != nil {
@@ -871,7 +923,7 @@ func checkUIProjectPath(config nullbot.Config, path string, write, tree bool) (s
 			return "", err
 		}
 	}
-	resolved, err := nullbot.CheckProjectPath(config, path, write, tree)
+	resolved, err := nullbot.CheckProjectAccess(config, path, capability, tree)
 	if err != nil {
 		return "", err
 	}
@@ -889,21 +941,30 @@ func (a *App) SaveFile(req SaveFileRequest) (FilePreview, error) {
 	if len(req.Content) > maxPreviewBytes {
 		return FilePreview{}, fmt.Errorf("edited content exceeds %d bytes", maxPreviewBytes)
 	}
-	preview, err := a.PreviewFile(path)
+	preview, err := a.previewFile(path)
 	if err != nil {
 		return FilePreview{}, err
 	}
 	if !preview.Editable {
+		if preview.ReadOnlyReason != "" {
+			return FilePreview{}, fmt.Errorf("%s: %s", filepath.Base(path), preview.ReadOnlyReason)
+		}
 		return FilePreview{}, fmt.Errorf("%s is not editable in the built-in editor", filepath.Base(path))
 	}
-	if err := os.WriteFile(path, []byte(req.Content), 0600); err != nil {
+	// Write it back the way it was stored: a UTF-8 or UTF-16 byte order
+	// mark stays, so other tools keep reading the file correctly.
+	data, err := encodeText(req.Content, preview.Encoding)
+	if err != nil {
 		return FilePreview{}, err
 	}
-	return a.PreviewFile(path)
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		return FilePreview{}, err
+	}
+	return a.previewFile(path)
 }
 
 func (a *App) CreateDirectory(req FileCreateRequest) (FileBrowser, error) {
-	parent, target, err := createTargetPath(req.Dir, req.Name)
+	parent, target, err := createTargetPath(a.bot.Config(), req.Dir, req.Name)
 	if err != nil {
 		return FileBrowser{}, err
 	}
@@ -917,7 +978,7 @@ func (a *App) CreateDirectory(req FileCreateRequest) (FileBrowser, error) {
 }
 
 func (a *App) CreateFile(req FileCreateRequest) (FileBrowser, error) {
-	parent, target, err := createTargetPath(req.Dir, req.Name)
+	parent, target, err := createTargetPath(a.bot.Config(), req.Dir, req.Name)
 	if err != nil {
 		return FileBrowser{}, err
 	}
@@ -935,52 +996,68 @@ func (a *App) CreateFile(req FileCreateRequest) (FileBrowser, error) {
 }
 
 func (a *App) RenamePath(req FileRenameRequest) (FileBrowser, error) {
-	path, err := filepath.Abs(filepath.Clean(req.Path))
+	config := a.bot.Config()
+	lexical, err := lexicalPath(config, req.Path)
 	if err != nil {
 		return FileBrowser{}, err
 	}
-	if _, err := os.Stat(path); err != nil {
-		return FileBrowser{}, err
-	}
-	parent := filepath.Dir(path)
-	_, target, err := createTargetPath(parent, req.NewName)
+	// A link is renamed itself, never what it points to.
+	path, _, err := linkAwarePath(config, lexical, nullbot.CapWrite)
 	if err != nil {
 		return FileBrowser{}, err
 	}
-	if samePath(path, target) {
-		return a.listFiles(parent)
+	if isProjectRoot(config, lexical) || isProjectRoot(config, path) {
+		return FileBrowser{}, fmt.Errorf("a project folder can’t be renamed from here; change it in Settings")
 	}
-	if _, err := os.Stat(target); err == nil {
-		return FileBrowser{}, fmt.Errorf("%s already exists", target)
-	} else if !os.IsNotExist(err) {
+	listed := filepath.Dir(lexical)
+	_, target, err := createTargetPath(config, listed, req.NewName)
+	if err != nil {
 		return FileBrowser{}, err
 	}
-	if _, err := checkUIProjectPath(a.bot.Config(), path, true, true); err != nil {
+	if filepath.Base(lexical) == filepath.Base(target) {
+		return a.listFiles(listed)
+	}
+	source, err := os.Lstat(path)
+	if err != nil {
 		return FileBrowser{}, err
 	}
-	if _, err := checkUIProjectPath(a.bot.Config(), target, true, true); err != nil {
+	// On a file system that ignores case, the new name can find the file
+	// itself: a change of case alone is still a rename.
+	if existing, err := os.Lstat(target); err == nil && !os.SameFile(source, existing) {
+		return FileBrowser{}, fmt.Errorf("%s already exists", filepath.Base(target))
+	} else if err != nil && !os.IsNotExist(err) {
+		return FileBrowser{}, err
+	}
+	if _, err := checkUIProjectPath(config, target, true, true); err != nil {
 		return FileBrowser{}, err
 	}
 	if err := os.Rename(path, target); err != nil {
 		return FileBrowser{}, err
 	}
-	return a.listFiles(parent)
+	return a.listFiles(listed)
 }
 
-func (a *App) DeletePath(path string) (FileBrowser, error) {
-	path, err := checkUIProjectPath(a.bot.Config(), path, true, true)
+func (a *App) DeletePath(raw string) (FileBrowser, error) {
+	config := a.bot.Config()
+	// A link is deleted itself, never what it points to.
+	path, link, err := linkAwarePath(config, raw, nullbot.CapDelete)
 	if err != nil {
 		return FileBrowser{}, err
+	}
+	parent := filepath.Dir(path)
+	workspace, _ := filepath.Abs(filepath.Clean(config.WorkspaceDir))
+	if samePath(path, workspace) || samePath(path, parent) || filepath.Base(path) == string(filepath.Separator) || isProjectRoot(config, path) {
+		return FileBrowser{}, fmt.Errorf("refusing to delete protected directory %s", path)
+	}
+	if link {
+		if err := os.Remove(path); err != nil {
+			return FileBrowser{}, err
+		}
+		return a.listFiles(parent)
 	}
 	info, err := os.Stat(path)
 	if err != nil {
 		return FileBrowser{}, err
-	}
-	config := a.bot.Config()
-	workspace, _ := filepath.Abs(filepath.Clean(config.WorkspaceDir))
-	parent := filepath.Dir(path)
-	if samePath(path, workspace) || samePath(path, parent) || filepath.Base(path) == string(filepath.Separator) {
-		return FileBrowser{}, fmt.Errorf("refusing to delete protected directory %s", path)
 	}
 	if info.IsDir() {
 		if err := os.RemoveAll(path); err != nil {
@@ -1048,8 +1125,25 @@ func (a *App) Skills() ([]SkillFile, error) {
 	return out, nil
 }
 
+// ReadSkill previews a SKILL.md inside a configured skill folder.
 func (a *App) ReadSkill(path string) (FilePreview, error) {
-	return a.PreviewFile(path)
+	config := a.bot.Config()
+	roots := append([]string{filepath.Join(config.AppDir, "skills")}, config.SkillDirs...)
+	skillConfig := config
+	skillConfig.Projects = nil
+	for i, root := range roots {
+		if strings.TrimSpace(root) != "" {
+			skillConfig.Projects = append(skillConfig.Projects, nullbot.Project{ID: fmt.Sprintf("skills-%d", i), Name: "skills", Path: root, Permission: "read-only"})
+		}
+	}
+	if !strings.EqualFold(filepath.Base(path), "SKILL.md") || len(skillConfig.Projects) == 0 {
+		return FilePreview{}, fmt.Errorf("not a skill file")
+	}
+	resolved, err := checkUIProjectPath(skillConfig, path, false, false)
+	if err != nil {
+		return FilePreview{}, err
+	}
+	return a.previewFile(resolved)
 }
 
 func (a *App) SaveSkill(req SkillSaveRequest) (SkillFile, error) {
@@ -1150,53 +1244,30 @@ func (a *App) MCPState() (map[string]any, error) {
 	}, nil
 }
 
+// DiscoverMCPTools starts the server if needed (through the shared pool) and
+// lists its tools with the capability each is treated as needing.
 func (a *App) DiscoverMCPTools(id string) ([]MCPToolInfo, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return nil, fmt.Errorf("server id is required")
 	}
-	config := a.bot.Config()
-	entry, ok := config.EnabledMCPServers[id]
+	entry, ok := a.bot.Config().EnabledMCPServers[id]
 	if !ok {
 		return nil, fmt.Errorf("MCP server %q is not configured", id)
 	}
 	if !entry.Enabled {
 		return nil, fmt.Errorf("MCP server %q is disabled", id)
 	}
-	if err := nullbot.ValidateProjects(config); err != nil {
-		return nil, err
-	}
-	if len(config.Projects) == 0 {
-		return nil, fmt.Errorf("MCP discovery requires all projects to have Full access")
-	}
-	for _, project := range config.Projects {
-		if project.Permission != "full" {
-			return nil, fmt.Errorf("MCP discovery requires all projects to have Full access")
-		}
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	client, err := mcpClientForEntry(ctx, entry)
-	if err != nil {
+	if err := a.bot.StartMCPServer(ctx, id); err != nil {
 		return nil, err
 	}
-	defer client.Close()
-	if _, err := client.Initialize(ctx); err != nil {
-		return nil, err
+	status, _ := a.bot.MCPServerStatusByID(id)
+	out := make([]MCPToolInfo, 0, len(status.Tools))
+	for _, tool := range status.Tools {
+		out = append(out, MCPToolInfo{Name: tool.Name, Title: tool.Title, Description: tool.Description, InputSchema: tool.InputSchema, Requirement: tool.Requirement, Policy: tool.Policy})
 	}
-	tools, err := client.ListTools(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]MCPToolInfo, 0, len(tools))
-	for _, tool := range tools {
-		out = append(out, MCPToolInfo{
-			Name:        tool.Name,
-			Description: tool.Description,
-			InputSchema: tool.InputSchema,
-		})
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
 }
 
@@ -1223,17 +1294,20 @@ func (a *App) AddMCPServer(input MCPInput) (UIState, error) {
 		return UIState{}, fmt.Errorf("command or endpoint is required")
 	}
 	err := a.bot.UpdateConfig(func(config *nullbot.Config) {
-		if config.EnabledMCPServers == nil {
-			config.EnabledMCPServers = map[string]nullbot.MCPEntry{}
+		servers := make(map[string]nullbot.MCPEntry, len(config.EnabledMCPServers)+1)
+		for k, v := range config.EnabledMCPServers {
+			servers[k] = v
 		}
-		config.EnabledMCPServers[id] = nullbot.MCPEntry{
+		servers[id] = nullbot.MCPEntry{
 			Name:      firstNonEmpty(input.Name, id),
 			Command:   command,
 			Args:      args,
 			Env:       input.Env,
+			Headers:   input.Headers,
 			Transport: transport,
 			Enabled:   input.Enabled,
 		}
+		config.EnabledMCPServers = servers
 	})
 	if err != nil {
 		return UIState{}, err
@@ -1255,9 +1329,11 @@ func (a *App) ToggleMCPServer(id, action string) (UIState, error) {
 	case "enable":
 		if _, ok := config.EnabledMCPServers[id]; ok {
 			err = a.bot.UpdateConfig(func(config *nullbot.Config) {
-				entry := config.EnabledMCPServers[id]
+				servers := copyServers(config.EnabledMCPServers)
+				entry := servers[id]
 				entry.Enabled = true
-				config.EnabledMCPServers[id] = entry
+				servers[id] = entry
+				config.EnabledMCPServers = servers
 			})
 		} else {
 			next, err = nullbot.EnableMCPServer(config, id)
@@ -1267,14 +1343,18 @@ func (a *App) ToggleMCPServer(id, action string) (UIState, error) {
 		}
 	case "disable":
 		err = a.bot.UpdateConfig(func(config *nullbot.Config) {
-			if entry, ok := config.EnabledMCPServers[id]; ok {
+			servers := copyServers(config.EnabledMCPServers)
+			if entry, ok := servers[id]; ok {
 				entry.Enabled = false
-				config.EnabledMCPServers[id] = entry
+				servers[id] = entry
 			}
+			config.EnabledMCPServers = servers
 		})
 	case "remove":
 		err = a.bot.UpdateConfig(func(config *nullbot.Config) {
-			delete(config.EnabledMCPServers, id)
+			servers := copyServers(config.EnabledMCPServers)
+			delete(servers, id)
+			config.EnabledMCPServers = servers
 		})
 	default:
 		err = fmt.Errorf("unsupported MCP action %q", action)
@@ -1286,6 +1366,8 @@ func (a *App) ToggleMCPServer(id, action string) (UIState, error) {
 	return a.State()
 }
 
+// Sessions lists saved sessions, newest first. Only the sessions returned
+// are read.
 func (a *App) Sessions(limit int) ([]SessionSummary, error) {
 	if limit <= 0 {
 		limit = 100
@@ -1296,35 +1378,48 @@ func (a *App) Sessions(limit int) ([]SessionSummary, error) {
 	if err != nil {
 		return nil, nil
 	}
-	var sessions []SessionSummary
+	type candidate struct {
+		name string
+		mod  time.Time
+	}
+	var files []candidate
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
 			continue
 		}
-		path := filepath.Join(dir, entry.Name())
 		info, err := entry.Info()
 		if err != nil {
 			continue
 		}
-		messages, _ := readSessionFile(path, 0)
-		preview := ""
-		if len(messages) > 0 {
-			last := messages[len(messages)-1]
-			preview = last.Role + ": " + truncateRunes(strings.ReplaceAll(last.Content, "\n", " "), 160)
-		}
-		sessions = append(sessions, SessionSummary{
-			SessionID: strings.TrimSuffix(entry.Name(), ".jsonl"),
-			Path:      path,
-			Messages:  len(messages),
-			Preview:   preview,
-			Modified:  info.ModTime(),
-		})
+		files = append(files, candidate{entry.Name(), info.ModTime()})
 	}
-	sort.Slice(sessions, func(i, j int) bool { return sessions[i].Modified.After(sessions[j].Modified) })
-	if len(sessions) > limit {
-		sessions = sessions[:limit]
+	sort.Slice(files, func(i, j int) bool { return files[i].mod.After(files[j].mod) })
+	if len(files) > limit {
+		files = files[:limit]
+	}
+	sessions := make([]SessionSummary, 0, len(files))
+	for _, file := range files {
+		sessions = append(sessions, summarizeSession(filepath.Join(dir, file.name), file.mod))
 	}
 	return sessions, nil
+}
+
+// summarizeSession titles a session by its first request and previews its
+// last message.
+func summarizeSession(path string, modified time.Time) SessionSummary {
+	messages, _ := readSessionFile(path, 0)
+	summary := SessionSummary{SessionID: strings.TrimSuffix(filepath.Base(path), ".jsonl"), Path: path, Messages: len(messages), Modified: modified}
+	for _, message := range messages {
+		if message.Role == "user" && strings.TrimSpace(message.Content) != "" && message.Lane != "also" {
+			summary.Title = truncateRunes(strings.Join(strings.Fields(message.Content), " "), 120)
+			break
+		}
+	}
+	if len(messages) > 0 {
+		last := messages[len(messages)-1]
+		summary.Preview = last.Role + ": " + truncateRunes(strings.ReplaceAll(last.Content, "\n", " "), 160)
+	}
+	return summary
 }
 
 func (a *App) ReadSession(sessionID string, limit int) ([]nullbot.Message, error) {
@@ -1358,24 +1453,65 @@ func (a *App) LoadSession(sessionID string, limit int) (nullbot.Reply, error) {
 	return reply, nil
 }
 
+// SearchSessions lists sessions with a message or tool call matching query,
+// most recent match first, each with its first match as a snippet.
 func (a *App) SearchSessions(query string) ([]SessionSummary, error) {
-	query = strings.ToLower(strings.TrimSpace(query))
-	sessions, err := a.Sessions(1000)
-	if err != nil || query == "" {
-		return sessions, err
+	if strings.TrimSpace(query) == "" {
+		return a.Sessions(1000)
 	}
-	var matches []SessionSummary
-	for _, session := range sessions {
-		messages, _ := readSessionFile(session.Path, 0)
-		hay := strings.ToLower(session.SessionID + " " + session.Preview)
-		for _, msg := range messages {
-			hay += " " + strings.ToLower(msg.Content)
-		}
-		if strings.Contains(hay, query) {
-			matches = append(matches, session)
-		}
+	result, err := nullbot.SearchHistory(a.bot.Config(), nullbot.HistoryQuery{Text: query, Limit: 200})
+	if err != nil {
+		return nil, err
 	}
-	return matches, nil
+	return a.sessionsForHits(result.Hits), nil
+}
+
+// SearchSessionsWith lists sessions with matches for a filtered search, most
+// recent match first.
+func (a *App) SearchSessionsWith(query nullbot.HistoryQuery) ([]SessionSummary, error) {
+	query.SessionID = ""
+	if query.Limit <= 0 {
+		query.Limit = 200
+	}
+	result, err := nullbot.SearchHistory(a.bot.Config(), query)
+	if err != nil {
+		return nil, err
+	}
+	return a.sessionsForHits(result.Hits), nil
+}
+
+func (a *App) sessionsForHits(hits []nullbot.HistoryHit) []SessionSummary {
+	dir := filepath.Join(a.bot.Config().AppDir, "history")
+	index := map[string]int{}
+	var sessions []SessionSummary
+	for _, hit := range hits {
+		if i, ok := index[hit.SessionID]; ok {
+			sessions[i].Matches++
+			continue
+		}
+		path := filepath.Join(dir, hit.SessionID+".jsonl")
+		modified := time.Time{}
+		if info, err := os.Stat(path); err == nil {
+			modified = info.ModTime()
+		}
+		summary := summarizeSession(path, modified)
+		summary.Matches, summary.Snippet = 1, hit.Snippet
+		index[hit.SessionID] = len(sessions)
+		sessions = append(sessions, summary)
+	}
+	return sessions
+}
+
+// SearchHistory searches saved messages and tool calls with filters; see
+// nullbot.HistoryQuery.
+func (a *App) SearchHistory(query nullbot.HistoryQuery) (nullbot.HistorySearchResult, error) {
+	return nullbot.SearchHistory(a.bot.Config(), query)
+}
+
+// SessionEntries returns a session's messages and, optionally, the tool calls
+// made during it, in time order.
+func (a *App) SessionEntries(sessionID string, includeTools bool) ([]nullbot.HistoryEntry, error) {
+	return nullbot.HistorySessionEntries(a.bot.Config(), sessionID, includeTools)
 }
 
 func (a *App) SaveCurrentSession(name string) (SessionSummary, error) {
@@ -1646,10 +1782,14 @@ func (a *App) listFiles(path string) (FileBrowser, error) {
 	}, nil
 }
 
-func createTargetPath(dir, name string) (string, string, error) {
-	parent, err := filepath.Abs(filepath.Clean(strings.TrimSpace(dir)))
+func createTargetPath(config nullbot.Config, dir, name string) (string, string, error) {
+	parent, err := lexicalPath(config, dir)
 	if err != nil {
 		return "", "", err
+	}
+	// Refuse paths outside the projects before touching the disk.
+	if !nullbot.PathLexicallyInProjects(config, parent) {
+		return "", "", fmt.Errorf("path is outside configured projects")
 	}
 	info, err := os.Stat(parent)
 	if err != nil {
@@ -1734,17 +1874,14 @@ func (a *App) marketState(refresh bool) MarketState {
 	return state
 }
 
-func mcpClientForEntry(ctx context.Context, entry nullbot.MCPEntry) (*mcp.Client, error) {
-	switch strings.ToLower(strings.TrimSpace(entry.Transport)) {
-	case "", "stdio":
-		return mcp.NewStdioClientWithEnv(ctx, entry.Command, entry.Args, entry.Env)
-	case "http", "streamable-http", "streamable_http":
-		return mcp.NewHTTPClient(entry.Command, nil), nil
-	case "sse":
-		return mcp.NewSSEClient(entry.Command, nil), nil
-	default:
-		return nil, fmt.Errorf("unsupported MCP transport %q", entry.Transport)
+// copyServers copies the server map so updates never mutate the live config
+// before it validates and saves.
+func copyServers(in map[string]nullbot.MCPEntry) map[string]nullbot.MCPEntry {
+	out := make(map[string]nullbot.MCPEntry, len(in))
+	for k, v := range in {
+		out[k] = v
 	}
+	return out
 }
 
 func (a *App) scanLocalMCPServers() []LocalMCPServer {
@@ -1877,30 +2014,14 @@ func envValueFor(names string) string {
 	return ""
 }
 
-func readTextPreview(path string) (string, bool, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return "", false, err
-	}
-	defer file.Close()
-	var buf bytes.Buffer
-	n, err := io.CopyN(&buf, file, maxPreviewBytes+1)
-	if err != nil && err != io.EOF {
-		return "", false, err
-	}
-	data := buf.Bytes()
-	truncated := n > maxPreviewBytes
-	if truncated {
-		data = data[:maxPreviewBytes]
-	}
-	if !utf8.Valid(data) {
-		return "", truncated, fmt.Errorf("file is not valid UTF-8 text")
-	}
-	return string(data), truncated, nil
+func parseCSVRows(content string) ([]string, [][]string) {
+	return parseRowsWith(content, ',')
 }
 
-func parseCSVRows(content string) ([]string, [][]string) {
+func parseRowsWith(content string, separator rune) ([]string, [][]string) {
 	reader := csv.NewReader(strings.NewReader(content))
+	reader.Comma = separator
+	reader.LazyQuotes = true
 	reader.FieldsPerRecord = -1
 	var rows [][]string
 	for len(rows) < 200 {
@@ -1931,7 +2052,7 @@ func parseXLSXPreview(path string) ([]string, [][]string, error) {
 	if file == nil {
 		return nil, nil, fmt.Errorf("worksheet not found")
 	}
-	rc, err := file.Open()
+	rc, err := openZipEntry(file)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1948,7 +2069,7 @@ func readSharedStrings(files []*zip.File) []string {
 	if file == nil {
 		return nil
 	}
-	rc, err := file.Open()
+	rc, err := openZipEntry(file)
 	if err != nil {
 		return nil
 	}
@@ -1978,7 +2099,10 @@ func readSharedStrings(files []*zip.File) []string {
 			switch t.Name.Local {
 			case "si":
 				inSI = false
-				out = append(out, b.String())
+				out = append(out, truncateRunes(b.String(), 2000))
+				if len(out) >= 200_000 {
+					return out
+				}
 			case "t":
 				inT = false
 			}
@@ -2033,6 +2157,10 @@ func decodeWorksheetRows(reader io.Reader, shared []string, limit int) [][]strin
 			switch t.Name.Local {
 			case "c":
 				col := cellColumnIndex(cellRef)
+				if col >= 200 {
+					// Far-right columns aren't shown; don't allocate up to them.
+					continue
+				}
 				for len(current) <= col {
 					current = append(current, "")
 				}
@@ -2042,7 +2170,7 @@ func decodeWorksheetRows(reader io.Reader, shared []string, limit int) [][]strin
 						value = shared[idx]
 					}
 				}
-				current[col] = value
+				current[col] = truncateRunes(value, 2000)
 			case "v", "t":
 				inV = false
 			case "row":
@@ -2071,7 +2199,7 @@ func extractDocxText(path string) (string, error) {
 	if file == nil {
 		return "", fmt.Errorf("word/document.xml not found")
 	}
-	rc, err := file.Open()
+	rc, err := openZipEntry(file)
 	if err != nil {
 		return "", err
 	}
@@ -2106,6 +2234,9 @@ func extractDocxText(path string) (string, error) {
 				b.Write([]byte(t))
 			}
 		}
+		if b.Len() > maxExtractedText {
+			break
+		}
 	}
 	return strings.TrimSpace(b.String()), nil
 }
@@ -2117,46 +2248,6 @@ func zipFileByName(files []*zip.File, name string) *zip.File {
 		}
 	}
 	return nil
-}
-
-func fileKind(path string) string {
-	ext := strings.ToLower(filepath.Ext(path))
-	switch ext {
-	case ".md", ".markdown", ".mdown":
-		return "markdown"
-	case ".txt", ".log", ".out", ".err", ".ini", ".env", ".cfg", ".conf":
-		return "text"
-	case ".go", ".ts", ".tsx", ".js", ".jsx", ".json", ".yaml", ".yml", ".toml", ".xml", ".html", ".css", ".scss", ".py", ".ps1", ".sh", ".bat", ".sql", ".rs", ".java", ".c", ".cpp", ".h":
-		return "code"
-	case ".csv", ".tsv":
-		return "csv"
-	case ".xlsx", ".xlsm":
-		return "xlsx"
-	case ".docx":
-		return "docx"
-	case ".pdf":
-		return "pdf"
-	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg":
-		return "image"
-	case ".zip", ".tar", ".gz", ".tgz":
-		return "archive"
-	case ".jsonl", ".ndjson":
-		return "data"
-	default:
-		return "binary"
-	}
-}
-
-func isEditableKind(kind, ext string, size int64) bool {
-	if size > maxPreviewBytes {
-		return false
-	}
-	switch kind {
-	case "markdown", "text", "code", "csv", "data":
-		return true
-	default:
-		return false
-	}
 }
 
 func readSessionFile(path string, limit int) ([]nullbot.Message, error) {
@@ -2257,13 +2348,16 @@ func parseDate(value string, endOfDay bool) time.Time {
 	if value == "" {
 		return time.Time{}
 	}
-	for _, layout := range []string{time.RFC3339, "2006-01-02"} {
-		if t, err := time.Parse(layout, value); err == nil {
-			if endOfDay && layout == "2006-01-02" {
-				return t.Add(24*time.Hour - time.Nanosecond)
-			}
-			return t
+	if t, err := time.Parse(time.RFC3339, value); err == nil {
+		return t
+	}
+	// A bare date is a day on this computer's calendar, matching the
+	// local-time buckets the report groups by.
+	if t, err := time.ParseInLocation("2006-01-02", value, time.Local); err == nil {
+		if endOfDay {
+			return t.AddDate(0, 0, 1).Add(-time.Nanosecond)
 		}
+		return t
 	}
 	return time.Time{}
 }

@@ -492,6 +492,7 @@ export namespace app {
 	    install_dir?: string;
 	    installed_asset?: string;
 	    installed_at?: string;
+	    installed_sha256?: string;
 	    status: string;
 	    readme?: string;
 	    error?: string;
@@ -518,6 +519,7 @@ export namespace app {
 	        this.install_dir = source["install_dir"];
 	        this.installed_asset = source["installed_asset"];
 	        this.installed_at = source["installed_at"];
+	        this.installed_sha256 = source["installed_sha256"];
 	        this.status = source["status"];
 	        this.readme = source["readme"];
 	        this.error = source["error"];
@@ -918,6 +920,154 @@ export namespace app {
 		    return a;
 		}
 	}
+	export class ServiceAccountInfo {
+	    id: string;
+	    service: string;
+	    label: string;
+	    status: string;
+	    allow_write: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new ServiceAccountInfo(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.service = source["service"];
+	        this.label = source["label"];
+	        this.status = source["status"];
+	        this.allow_write = source["allow_write"];
+	    }
+	}
+	export class ServiceAccountInput {
+	    id: string;
+	    service: string;
+	    label: string;
+	    fields: Record<string, string>;
+	    allow_write: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new ServiceAccountInput(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.service = source["service"];
+	        this.label = source["label"];
+	        this.fields = source["fields"];
+	        this.allow_write = source["allow_write"];
+	    }
+	}
+	export class ServiceStatus {
+	    service: string;
+	    server_id: string;
+	    status: string;
+
+	    static createFrom(source: any = {}) {
+	        return new ServiceStatus(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.service = source["service"];
+	        this.server_id = source["server_id"];
+	        this.status = source["status"];
+	    }
+	}
+	export class ServiceAccountState {
+	    accounts: ServiceAccountInfo[];
+	    services: ServiceStatus[];
+
+	    static createFrom(source: any = {}) {
+	        return new ServiceAccountState(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.accounts = this.convertValues(source["accounts"], ServiceAccountInfo);
+	        this.services = this.convertValues(source["services"], ServiceStatus);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ServiceField {
+	    key: string;
+	    label: string;
+	    secret: boolean;
+	    required: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new ServiceField(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
+	        this.label = source["label"];
+	        this.secret = source["secret"];
+	        this.required = source["required"];
+	    }
+	}
+	export class ServiceDefinition {
+	    id: string;
+	    label: string;
+	    group: string;
+	    server_id: string;
+	    detail: string;
+	    fields: ServiceField[];
+
+	    static createFrom(source: any = {}) {
+	        return new ServiceDefinition(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.label = source["label"];
+	        this.group = source["group"];
+	        this.server_id = source["server_id"];
+	        this.detail = source["detail"];
+	        this.fields = this.convertValues(source["fields"], ServiceField);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+
 	export class Submission {
 	    request_id?: string;
 	    id: string;

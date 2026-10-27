@@ -119,3 +119,34 @@ func TestChatSteerWithoutPrimaryPreservesDraft(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestChatLeadingSkillNameSelectsSkill(t *testing.T) {
+	c := permissionConfig(t, "read-write")
+	skill := filepath.Join(c.SkillDirs[0], "release-notes", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(skill), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(skill, []byte("---\nname: release-notes\ndescription: Draft release notes\n---\nGroup by area.\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	a := permissionApp(c)
+	a.bot.RequestPause()
+	reply, err := a.SubmitChatRequest(ChatRequest{Mode: "queue", Text: "/release-notes draft v2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reply.Data["submission_status"] != "queued" {
+		t.Fatalf("skill message not queued: %#v", reply.Data)
+	}
+	paths, _ := reply.Data["selected_skills"].([]string)
+	if len(paths) != 1 || filepath.Base(filepath.Dir(paths[0])) != "release-notes" {
+		t.Fatalf("selected skills %#v", reply.Data["selected_skills"])
+	}
+	queue := a.ChatSubmissionState().Queue
+	if len(queue) != 1 || queue[0].Input != "draft v2" {
+		t.Fatalf("queued %#v", queue)
+	}
+	if _, err := a.SubmitChatRequest(ChatRequest{Mode: "queue", Text: "/release-notes"}); err == nil {
+		t.Fatal("bare skill name accepted")
+	}
+}

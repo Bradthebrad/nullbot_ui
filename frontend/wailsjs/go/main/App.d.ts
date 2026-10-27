@@ -31,6 +31,10 @@ export function CompactConversation(arg1:string):Promise<app.Reply>;
 
 export function CompletePath(arg1:string,arg2:string):Promise<Array<main.PathSuggestion>>;
 
+export function ContextWindow(arg1:string,arg2:string):Promise<any>;
+
+export function CopyPaths(arg1:any):Promise<main.FileBrowser>;
+
 export function CreateDirectory(arg1:main.FileCreateRequest):Promise<main.FileBrowser>;
 
 export function CreateFile(arg1:main.FileCreateRequest):Promise<main.FileBrowser>;
@@ -45,6 +49,10 @@ export function DeletePlan(arg1:string):Promise<app.Reply>;
 
 export function DeleteScheduledTask(arg1:string):Promise<Array<app.ScheduledTask>>;
 
+export function DeleteServiceAccount(arg1:string):Promise<void>;
+
+export function DeleteVisualization(arg1:string):Promise<void>;
+
 export function DiscoverMCPTools(arg1:string):Promise<Array<main.MCPToolInfo>>;
 
 export function ExecutePlan(arg1:string):Promise<app.Reply>;
@@ -53,15 +61,31 @@ export function InstallMarketPackage(arg1:string,arg2:boolean,arg3:boolean):Prom
 
 export function ListFiles(arg1:string):Promise<main.FileBrowser>;
 
+export function LiveVisualizations():Promise<Array<any>>;
+
 export function LoadSession(arg1:string,arg2:number):Promise<app.Reply>;
+
+export function MCPServer(arg1:string):Promise<any>;
+
+export function MCPServers():Promise<Array<any>>;
 
 export function MCPState():Promise<Record<string, any>>;
 
 export function Marketplace(arg1:boolean):Promise<main.MarketState>;
 
+export function ModelCatalog(arg1:boolean):Promise<Array<app.ModelGroup>>;
+
 export function Models():Promise<Array<app.ModelGroup>>;
 
 export function OpenCodexLogin():Promise<main.AccountState>;
+
+export function OpenExternal(arg1:string):Promise<void>;
+
+export function OpenPath(arg1:string):Promise<void>;
+
+export function OpenVisualization(arg1:string,arg2:string):Promise<any>;
+
+export function OpenWith(arg1:string):Promise<void>;
 
 export function Pause():Promise<app.Reply>;
 
@@ -81,11 +105,21 @@ export function ReadSession(arg1:string,arg2:number):Promise<Array<app.Message>>
 
 export function ReadSkill(arg1:string):Promise<main.FilePreview>;
 
+export function RecordVisualEvents(arg1:string,arg2:Array<Record<string, any>>):Promise<void>;
+
 export function RemoveQueuedChat(arg1:string):Promise<app.SubmissionSnapshot>;
 
 export function RenamePath(arg1:main.FileRenameRequest):Promise<main.FileBrowser>;
 
+export function RespondVisualization(arg1:any):Promise<any>;
+
+export function RestartMCPServer(arg1:string):Promise<any>;
+
 export function Resume():Promise<app.Reply>;
+
+export function RevealPath(arg1:string):Promise<void>;
+
+export function RevealVisualization(arg1:string):Promise<void>;
 
 export function RunScheduledTaskNow(arg1:string):Promise<Array<app.ScheduledTask>>;
 
@@ -103,21 +137,43 @@ export function SaveProjects(arg1:Array<app.Project>,arg2:string):Promise<main.P
 
 export function SavePrompts(arg1:app.PromptConfig):Promise<main.UIState>;
 
+export function SaveServiceAccount(arg1:app.ServiceAccountInput):Promise<void>;
+
 export function SaveSkill(arg1:main.SkillSaveRequest):Promise<main.SkillFile>;
 
 export function SaveUsageReport(arg1:main.UsageFilter):Promise<main.UsageReport>;
 
 export function ScheduledTasks():Promise<Array<app.ScheduledTask>>;
 
+export function SearchFiles(arg1:any):Promise<any>;
+
+export function SearchHistory(arg1:any):Promise<any>;
+
 export function SearchSessions(arg1:string):Promise<Array<main.SessionSummary>>;
+
+export function SearchSessionsWith(arg1:any):Promise<Array<main.SessionSummary>>;
 
 export function SendAlso(arg1:string):Promise<app.Reply>;
 
+export function ServiceAccountCatalog():Promise<Array<app.ServiceDefinition>>;
+
+export function ServiceAccountStatus():Promise<app.ServiceAccountState>;
+
+export function SessionEntries(arg1:string,arg2:boolean):Promise<Array<any>>;
+
 export function Sessions(arg1:number):Promise<Array<main.SessionSummary>>;
+
+export function SetAppearance(arg1:string,arg2:string):Promise<main.UIState>;
 
 export function SetBotName(arg1:string):Promise<main.UIState>;
 
+export function SetContextWindow(arg1:string,arg2:string,arg3:number):Promise<main.UIState>;
+
+export function SetMCPToolPolicy(arg1:string,arg2:string,arg3:string):Promise<any>;
+
 export function SetModel(arg1:string,arg2:string,arg3:string):Promise<main.UIState>;
+
+export function SetPrimaryProject(arg1:string):Promise<main.ProjectsState>;
 
 export function SetTheme(arg1:string):Promise<main.UIState>;
 
@@ -125,7 +181,17 @@ export function SetWorkingDirectory(arg1:string):Promise<main.FileBrowser>;
 
 export function Skills():Promise<Array<main.SkillFile>>;
 
+export function StartMCPServer(arg1:string):Promise<any>;
+
 export function State():Promise<main.UIState>;
+
+export function SteerSubagent(arg1:string,arg2:string):Promise<void>;
+
+export function StopEverything():Promise<app.Reply>;
+
+export function StopMCPServer(arg1:string):Promise<Array<any>>;
+
+export function StopRun(arg1:string):Promise<app.Reply>;
 
 export function Submit(arg1:string):Promise<app.Reply>;
 
@@ -140,3 +206,13 @@ export function Thoughts():Promise<Array<app.ThoughtSnapshot>>;
 export function ToggleMCPServer(arg1:string,arg2:string):Promise<main.UIState>;
 
 export function Usage():Promise<app.UsageSnapshot>;
+
+export function UsageSummary():Promise<app.UsageSnapshot>;
+
+export function VisualEvents(arg1:string,arg2:number):Promise<Array<Record<string, any>>>;
+
+export function VisualPage(arg1:string,arg2:string,arg3:string):Promise<any>;
+
+export function Visualization(arg1:string):Promise<any>;
+
+export function Visualizations(arg1:string):Promise<Array<any>>;

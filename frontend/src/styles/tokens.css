@@ -1,0 +1,122 @@
+/*
+ * NullBot design tokens.
+ *
+ * Graphite neutrals, hairline structure, and one signal color reserved for
+ * live state (running steps, the working indicator) and keyboard focus.
+ * Primary actions are graphite, not accent-colored.
+ */
+
+@import '@fontsource/ibm-plex-sans/latin-400.css';
+@import '@fontsource/ibm-plex-sans/latin-500.css';
+@import '@fontsource/ibm-plex-sans/latin-600.css';
+@import '@fontsource/ibm-plex-sans/latin-400-italic.css';
+@import '@fontsource/ibm-plex-mono/latin-400.css';
+@import '@fontsource/ibm-plex-mono/latin-500.css';
+
+:root {
+  color-scheme: light;
+
+  /* surfaces */
+  --bg: #f1f2f4;
+  --surface: #ffffff;
+  --surface-2: #f6f7f8;
+  --surface-3: #eceef1;
+  --line: #e0e3e7;
+  --line-strong: #c9ced5;
+
+  /* ink */
+  --ink: #1b1e22;
+  --ink-2: #4c535c;
+  --ink-3: #7c838c;
+  --ink-inverse: #ffffff;
+
+  /* signal (default: amber) */
+  --signal: #b9770c;
+  --signal-ink: #865300;
+  --signal-soft: rgb(185 119 12 / 0.12);
+
+  /* status */
+  --ok: #2c7a57;
+  --ok-soft: rgb(44 122 87 / 0.1);
+  --bad: #b4412f;
+  --bad-soft: rgb(180 65 47 / 0.09);
+  --link: #2b5c8c;
+  /* data marks (charts); validated against --surface in both modes */
+  --data-1: #3a6ea5;
+  /* File types in lists: muted, so they help scanning without competing with the signal color. */
+  --tone-doc: #3a6ea5; --tone-pdf: #a8493b; --tone-code: #56658a; --tone-sheet: #2c7a57; --tone-slides: #a8641c; --tone-media: #7a4ea0; --tone-archive: #7a6545;
+
+  /* overlay */
+  --shadow-pop: 0 1px 2px rgb(20 24 28 / 0.08), 0 10px 32px rgb(20 24 28 / 0.14);
+  --scrim: rgb(18 21 25 / 0.32);
+
+  /* type */
+  --font-ui: 'IBM Plex Sans', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Cascadia Mono', Consolas, ui-monospace, monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-lg: 15px;
+  --text-xl: 18px;
+  --text-2xl: 22px;
+
+  /* shape */
+  --r-1: 4px;
+  --r-2: 6px;
+  --r-3: 10px;
+
+  /* space */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+
+  /* layout */
+  --rail-w: 60px;
+  --bar-h: 44px;
+  --control-h: 30px;
+  --reading: 46rem;
+
+  /* motion */
+  --t-fast: 90ms;
+  --t: 140ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+:root[data-accent='teal'] { --signal: #12807a; --signal-ink: #0b5f5a; --signal-soft: rgb(18 128 122 / 0.12); }
+:root[data-accent='blue'] { --signal: #2f68b5; --signal-ink: #214f8c; --signal-soft: rgb(47 104 181 / 0.12); }
+:root[data-accent='violet'] { --signal: #6a4fc4; --signal-ink: #523a9e; --signal-soft: rgb(106 79 196 / 0.12); }
+:root[data-accent='rose'] { --signal: #b43f63; --signal-ink: #8c2c4a; --signal-soft: rgb(180 63 99 / 0.12); }
+
+:root[data-appearance='dark'] {
+  color-scheme: dark;
+  --bg: #111316;
+  --surface: #171a1e;
+  --surface-2: #1d2025;
+  --surface-3: #252a30;
+  --line: #2a2f36;
+  --line-strong: #3b414a;
+  --ink: #e4e6e9;
+  --ink-2: #a3aab2;
+  --ink-3: #6d757e;
+  --ink-inverse: #15181b;
+  --signal: #e2a43a;
+  --signal-ink: #efbb5c;
+  --signal-soft: rgb(226 164 58 / 0.14);
+  --ok: #5bb98d;
+  --ok-soft: rgb(91 185 141 / 0.12);
+  --bad: #e5735f;
+  --bad-soft: rgb(229 115 95 / 0.12);
+  --link: #8db5df;
+  --data-1: #5b93d6;
+  --tone-doc: #6d9fd8; --tone-pdf: #d98170; --tone-code: #95a3c6; --tone-sheet: #62bd93; --tone-slides: #d9a060; --tone-media: #ad8bd2; --tone-archive: #b5a07f;
+  --shadow-pop: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 36px rgb(0 0 0 / 0.5);
+  --scrim: rgb(0 0 0 / 0.5);
+}
+
+:root[data-appearance='dark'][data-accent='teal'] { --signal: #47c1b8; --signal-ink: #6fd3cb; --signal-soft: rgb(71 193 184 / 0.14); }
+:root[data-appearance='dark'][data-accent='blue'] { --signal: #6fa3e8; --signal-ink: #93baef; --signal-soft: rgb(111 163 232 / 0.14); }
+:root[data-appearance='dark'][data-accent='violet'] { --signal: #a28ff2; --signal-ink: #bcaef6; --signal-soft: rgb(162 143 242 / 0.14); }
+:root[data-appearance='dark'][data-accent='rose'] { --signal: #ea7d9e; --signal-ink: #f19bb5; --signal-soft: rgb(234 125 158 / 0.14); }
