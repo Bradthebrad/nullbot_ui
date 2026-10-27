@@ -136,6 +136,9 @@ export function VisualsView() {
 
 function VisualDetail({visual, onDeleted}: {visual: Visualization; onDeleted: () => void}) {
   const [events, setEvents] = useState<VisualEvent[] | null>(null);
+  // Pages and drawings run their own scripts: they start when asked, not
+  // just because a row was selected.
+  const [running, setRunning] = useState(visual.kind !== 'html' && visual.kind !== 'svg');
   useEffect(() => {
     let stale = false;
     api.visualEvents(visual.id, 2000).then(found => {
@@ -176,7 +179,14 @@ function VisualDetail({visual, onDeleted}: {visual: Visualization; onDeleted: ()
         <div className="visual-detail-status"><StatusChip visual={visual} />{visual.responded_at && <span className="muted">{visual.status === 'dismissed' ? 'Skipped' : 'Answered'} {formatDateTime(visual.responded_at)}</span>}</div>
         {visual.prompt && <p className="visual-prompt is-inline">{visual.prompt}</p>}
         <figure className="visual-preview">
-          <div className="visual-preview-box"><VisualSurface visual={visual} mode="preview" /></div>
+          <div className="visual-preview-box">
+            {running ? <VisualSurface visual={visual} mode="preview" /> : (
+              <div className="visual-preview-idle">
+                <p className="muted">This {visual.kind === 'svg' ? 'drawing' : 'page'} runs its own scripts.</p>
+                <button className="btn" onClick={() => setRunning(true)}>Show preview</button>
+              </div>
+            )}
+          </div>
           <figcaption className="faint">A preview: what you do here isn’t recorded. Open it to answer.</figcaption>
         </figure>
         {(visual.response != null || visual.note) && (

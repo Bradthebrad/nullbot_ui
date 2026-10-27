@@ -87,9 +87,17 @@ func (a *App) visualView(id, origin, page string) (VisualView, error) {
 		return VisualView{}, err
 	}
 	view := VisualView{Visual: v}
-	site := &visualSite{visualID: v.ID, dataDir: v.Dir, network: v.AllowNetwork}
+	// The internet only while the projects it reads from still allow it.
+	site := &visualSite{visualID: v.ID, dataDir: v.Dir, network: a.bot.VisualNetworkAllowed(v)}
 	if v.Kind == nullbot.VisualHTML && v.Root != "" {
-		site.root = v.Root
+		// Links are resolved once, so every file served is checked against
+		// the folder as it really is.
+		root, err := filepath.EvalSymlinks(v.Root)
+		if err != nil {
+			view.Error = "The visual's folder is gone: " + err.Error()
+			return view, nil
+		}
+		site.root = root
 	}
 	host := a.visualHost()
 	token, err := host.register(site)
@@ -141,7 +149,11 @@ func (a *App) visualPageSource(v nullbot.Visualization, site *visualSite, page s
 		if name == "" || name != filepath.Base(name) {
 			return nil, errors.New("the visual's content is missing")
 		}
-		return readLimited(filepath.Join(v.Dir, name), maxVisualPage)
+		file := filepath.Join(v.Dir, name)
+		if info, err := os.Lstat(file); err != nil || !info.Mode().IsRegular() {
+			return nil, errors.New("the visual's content is missing or not a plain file")
+		}
+		return readLimited(file, maxVisualPage)
 	}
 	title := v.Title
 	switch v.Kind {
@@ -162,18 +174,16 @@ func (a *App) visualPageSource(v nullbot.Visualization, site *visualSite, page s
 			data, err := readData(v.ContentFile)
 			return data, "", "", err
 		}
-		if !pathInside(site.root, target) {
-			return nil, "", "", errors.New("that page is outside the visual's folder")
-		}
-		resolved, err := checkUIProjectAccess(a.bot.Config(), target, nullbot.CapRead, false)
-		if err != nil {
-			return nil, "", "", err
-		}
-		if info, err := os.Stat(resolved); err == nil && info.IsDir() {
-			target = filepath.Join(target, "index.html")
-			if resolved, err = checkUIProjectAccess(a.bot.Config(), target, nullbot.CapRead, false); err != nil {
-				return nil, "", "", err
+		for _, part := range strings.Split(filepath.ToSlash(target), "/") {
+			if strings.EqualFold(part, ".nullbot") {
+				return nil, "", "", errors.New("NullBot's records can't be shown as a page")
 			}
+		}
+		resolved, err := siteFile(site.root, target, func(path string) (string, error) {
+			return checkUIProjectAccess(a.bot.Config(), path, nullbot.CapRead, false)
+		})
+		if err != nil {
+			return nil, "", "", fmt.Errorf("that page can't be shown: %w", err)
 		}
 		if !isPageFile(resolved) {
 			return nil, "", "", fmt.Errorf("%s is not a web page", filepath.Base(resolved))
@@ -182,7 +192,7 @@ func (a *App) visualPageSource(v nullbot.Visualization, site *visualSite, page s
 		if err != nil {
 			return nil, "", "", err
 		}
-		rel, _ := filepath.Rel(site.root, target)
+		rel, _ := filepath.Rel(site.root, resolved)
 		rel = filepath.ToSlash(rel)
 		return data, filepathDirSlash(rel), rel, nil
 	case nullbot.VisualSVG:
@@ -216,7 +226,7 @@ func (a *App) visualPageSource(v nullbot.Visualization, site *visualSite, page s
 		if err != nil {
 			return nil, "", "", err
 		}
-		pages, err := drawioPages(data)
+		pages, err := drawioPages(data, maxDrawioPages)
 		if err != nil {
 			return nil, "", "", err
 		}

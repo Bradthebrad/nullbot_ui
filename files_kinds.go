@@ -235,9 +235,8 @@ func (a *App) previewFile(path string) (FilePreview, error) {
 		data, err := readLimited(path, maxDrawioBytes)
 		if err == nil {
 			var pages []drawioPage
-			if pages, err = drawioPages(data); err == nil {
+			if pages, err = drawioPages(data, 1); err == nil {
 				preview.DataURL = "data:image/svg+xml;base64," + base64.StdEncoding.EncodeToString([]byte(pages[0].SVG))
-				preview.Count = len(pages)
 				preview.Content = pages[0].Name
 			}
 		}

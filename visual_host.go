@@ -168,11 +168,12 @@ func (v *visualSites) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if isPageFile(file) {
-		// A page asked for over HTTP is a frame navigating itself (pages
-		// are always handed over as srcdoc). Answer with an inert page and
-		// let the app show the real one.
-		dest := r.Header.Get("Sec-Fetch-Dest")
+	if dest := r.Header.Get("Sec-Fetch-Dest"); isPageFile(file) && dest != "empty" {
+		// A page asked for as a document is a frame navigating itself or a
+		// frame inside the page (pages are always handed over as srcdoc).
+		// It gets an inert page, and the app is told: if the visual's own
+		// page is the one leaving, the app shows the new page the safe way.
+		// A page fetched as data (fetch, XHR) is served as it is, inert.
 		if dest != "" && dest != "document" && dest != "iframe" && dest != "frame" {
 			http.NotFound(w, r)
 			return
@@ -210,25 +211,17 @@ func isPageFile(name string) bool {
 	return false
 }
 
-// resolve maps a URL path to a file the visual may load.
+// resolve maps a URL path to a file the visual may load: inside the site
+// folder even after links are followed, readable under the project's
+// permission, and never NullBot's own records.
 func (v *visualSites) resolve(site *visualSite, rel string) (string, error) {
 	if site.root != "" {
-		full := filepath.Join(site.root, filepath.FromSlash(rel))
-		if !pathInside(site.root, full) {
-			return "", errors.New("outside the site")
+		for _, part := range strings.Split(rel, "/") {
+			if strings.EqualFold(part, ".nullbot") {
+				return "", errors.New("NullBot's records aren't served")
+			}
 		}
-		resolved, err := v.canRead(full)
-		if err != nil {
-			return "", err
-		}
-		info, err := os.Stat(resolved)
-		if err != nil {
-			return "", err
-		}
-		if info.IsDir() {
-			return v.canRead(filepath.Join(full, "index.html"))
-		}
-		return resolved, nil
+		return siteFile(site.root, filepath.Join(site.root, filepath.FromSlash(rel)), v.canRead)
 	}
 	// The visual's own folder: pictures and content, never its records.
 	name := filepath.FromSlash(rel)
@@ -241,6 +234,35 @@ func (v *visualSites) resolve(site *visualSite, rel string) (string, error) {
 		return "", errors.New("not a plain file")
 	}
 	return file, nil
+}
+
+// siteFile authorizes full, a path in the site folder root (already
+// resolved), and returns the file to serve: a folder serves its index.html.
+func siteFile(root, full string, canRead func(string) (string, error)) (string, error) {
+	if !pathInside(root, full) {
+		return "", errors.New("outside the site")
+	}
+	resolved, err := canRead(full)
+	if err != nil {
+		return "", err
+	}
+	if !pathInside(root, resolved) && !samePath(root, resolved) {
+		return "", errors.New("a link leads outside the site")
+	}
+	info, err := os.Stat(resolved)
+	if err != nil {
+		return "", err
+	}
+	if info.IsDir() {
+		index := filepath.Join(resolved, "index.html")
+		if resolved, err = canRead(index); err != nil {
+			return "", err
+		}
+		if !pathInside(root, resolved) {
+			return "", errors.New("a link leads outside the site")
+		}
+	}
+	return resolved, nil
 }
 
 func pathInside(root, p string) bool {
@@ -311,9 +333,7 @@ func serveVisualFile(w http.ResponseWriter, r *http.Request, file string, site *
 }
 
 var (
-	headOpenTag = regexp.MustCompile(`(?is)<head(\s[^>]*)?>`)
-	htmlOpenTag = regexp.MustCompile(`(?is)<html(\s[^>]*)?>`)
-	doctypeTag  = regexp.MustCompile(`(?is)^\s*<!doctype[^>]*>`)
+	leadingDoctype = regexp.MustCompile(`(?i)^(?:\x{FEFF})?\s*<!doctype[^>]*>`)
 	// Chart.js from a CDN, which a visual without the internet can't reach.
 	chartCDNScript = regexp.MustCompile(`(?i)(<script[^>]*\ssrc\s*=\s*["'])https?://[^"']*chart(?:\.js|\.umd)[^"']*(["'])`)
 	// Site-root URLs in attributes, such as src="/assets/app.js".
@@ -374,12 +394,12 @@ func visualDocument(page []byte, origin, token, dir, name string, site *visualSi
 		return append([]byte(`<script crossorigin="anonymous"`), tag[len("<script"):]...)
 	})
 	head := fmt.Sprintf(`<base href="%s"><meta http-equiv="Content-Security-Policy" content="%s"><meta name="nullbot-page" content="%s"><script>%s</script>`, html.EscapeString(base), html.EscapeString(csp), html.EscapeString(name), bridge)
+	// First thing in the document: after a leading doctype (keeping the
+	// page out of quirks mode), else at the very start. The parser puts
+	// these elements in the head either way; searching the page for <head>
+	// could land inside a comment or a script.
 	at := 0
-	if loc := headOpenTag.FindIndex(page); loc != nil {
-		at = loc[1]
-	} else if loc := htmlOpenTag.FindIndex(page); loc != nil {
-		at = loc[1]
-	} else if loc := doctypeTag.FindIndex(page); loc != nil {
+	if loc := leadingDoctype.FindIndex(page); loc != nil {
 		at = loc[1]
 	}
 	var b strings.Builder

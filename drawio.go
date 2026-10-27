@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // draw.io diagrams render to SVG here, so they show without the draw.io
@@ -33,15 +34,37 @@ type drawioPage struct {
 	SVG  string `json:"svg"`
 }
 
-type xmlNode struct {
-	XMLName xml.Name
-	Attrs   []xml.Attr `xml:",any,attr"`
-	Nodes   []xmlNode  `xml:",any"`
-	Text    string     `xml:",chardata"`
+// Diagrams come from files of any origin, so parsing is a token stream (no
+// document tree), and bounded: elements read, cells, points per connector,
+// label length, and bytes inflated across all pages.
+const (
+	maxDrawioTokens   = 400_000
+	maxDrawioPoints   = 1000
+	maxDrawioValue    = 8000
+	maxDrawioStyle    = 4000
+	maxDrawioLabel    = 2000
+	maxDrawioLines    = 40
+	maxDrawioPages    = 50
+	maxDrawioInflated = maxDrawioBytes
+)
+
+type drawioModel struct {
+	background string
+	cells      []*drawioCell
 }
 
-func (n xmlNode) attr(name string) string {
-	for _, a := range n.Attrs {
+type drawioBudget struct{ tokens, inflated int }
+
+func (b *drawioBudget) spend() error {
+	b.tokens++
+	if b.tokens > maxDrawioTokens {
+		return errors.New("the diagram is too large to draw here")
+	}
+	return nil
+}
+
+func startAttr(e xml.StartElement, name string) string {
+	for _, a := range e.Attr {
 		if a.Name.Local == name {
 			return a.Value
 		}
@@ -49,65 +72,88 @@ func (n xmlNode) attr(name string) string {
 	return ""
 }
 
-func (n xmlNode) child(name string) *xmlNode {
-	for i := range n.Nodes {
-		if n.Nodes[i].XMLName.Local == name {
-			return &n.Nodes[i]
-		}
+func clipText(s string, max int) string {
+	if len(s) <= max {
+		return s
 	}
-	return nil
+	return truncateRunes(s, max)
 }
 
-// drawioPages renders every page of a diagram.
-func drawioPages(data []byte) ([]drawioPage, error) {
+// nextStart returns the next start element, skipping prologs and text.
+func nextStart(d *xml.Decoder, budget *drawioBudget) (xml.StartElement, error) {
+	for {
+		tok, err := d.Token()
+		if err != nil {
+			return xml.StartElement{}, err
+		}
+		if err := budget.spend(); err != nil {
+			return xml.StartElement{}, err
+		}
+		if start, ok := tok.(xml.StartElement); ok {
+			return start, nil
+		}
+	}
+}
+
+func newDrawioDecoder(r io.Reader) *xml.Decoder {
+	d := xml.NewDecoder(r)
+	d.Strict = false
+	return d
+}
+
+// drawioPages renders up to maxPages pages of a diagram.
+func drawioPages(data []byte, maxPages int) ([]drawioPage, error) {
 	if len(data) > maxDrawioBytes {
 		return nil, fmt.Errorf("the diagram is larger than %d MB", maxDrawioBytes>>20)
 	}
-	var root xmlNode
-	decoder := xml.NewDecoder(bytes.NewReader(data))
-	decoder.Strict = false
-	if err := decoder.Decode(&root); err != nil {
+	if maxPages <= 0 || maxPages > maxDrawioPages {
+		maxPages = maxDrawioPages
+	}
+	budget := &drawioBudget{}
+	d := newDrawioDecoder(bytes.NewReader(data))
+	root, err := nextStart(d, budget)
+	if err != nil {
 		return nil, fmt.Errorf("not draw.io XML: %v", err)
 	}
 	var pages []drawioPage
-	switch root.XMLName.Local {
+	switch root.Name.Local {
 	case "mxGraphModel":
-		svg, err := renderDrawioModel(root)
+		model, err := parseDrawioModel(d, root, budget)
 		if err != nil {
 			return nil, err
 		}
-		pages = append(pages, drawioPage{Name: "Page-1", SVG: svg})
+		pages = append(pages, drawioPage{Name: "Page-1", SVG: renderDrawioModel(model)})
 	case "mxfile":
-		for i, diagram := range root.Nodes {
-			if diagram.XMLName.Local != "diagram" {
+		for len(pages) < maxPages {
+			tok, err := d.Token()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return nil, fmt.Errorf("not draw.io XML: %v", err)
+			}
+			if err := budget.spend(); err != nil {
+				return nil, err
+			}
+			start, ok := tok.(xml.StartElement)
+			if !ok {
 				continue
 			}
-			name := diagram.attr("name")
+			if start.Name.Local != "diagram" {
+				if err := d.Skip(); err != nil {
+					return nil, err
+				}
+				continue
+			}
+			name := clipText(startAttr(start, "name"), 120)
 			if name == "" {
-				name = fmt.Sprintf("Page-%d", i+1)
+				name = fmt.Sprintf("Page-%d", len(pages)+1)
 			}
-			model := diagram.child("mxGraphModel")
-			if model == nil {
-				decoded, err := inflateDrawio(diagram.Text)
-				if err != nil {
-					return nil, fmt.Errorf("page %s: %v", name, err)
-				}
-				var m xmlNode
-				d := xml.NewDecoder(strings.NewReader(decoded))
-				d.Strict = false
-				if err := d.Decode(&m); err != nil || m.XMLName.Local != "mxGraphModel" {
-					return nil, fmt.Errorf("page %s: not a diagram", name)
-				}
-				model = &m
-			}
-			svg, err := renderDrawioModel(*model)
+			model, err := parseDrawioDiagram(d, budget)
 			if err != nil {
 				return nil, fmt.Errorf("page %s: %v", name, err)
 			}
-			pages = append(pages, drawioPage{Name: name, SVG: svg})
-			if len(pages) >= 50 {
-				break
-			}
+			pages = append(pages, drawioPage{Name: name, SVG: renderDrawioModel(model)})
 		}
 	default:
 		return nil, errors.New("not draw.io XML: expected <mxfile> or <mxGraphModel>")
@@ -118,9 +164,134 @@ func drawioPages(data []byte) ([]drawioPage, error) {
 	return pages, nil
 }
 
+// parseDrawioDiagram reads one <diagram>: a model inside it, or compressed
+// text.
+func parseDrawioDiagram(d *xml.Decoder, budget *drawioBudget) (*drawioModel, error) {
+	var text strings.Builder
+	var model *drawioModel
+	for {
+		tok, err := d.Token()
+		if err != nil {
+			return nil, err
+		}
+		if err := budget.spend(); err != nil {
+			return nil, err
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			if t.Name.Local == "mxGraphModel" && model == nil {
+				if model, err = parseDrawioModel(d, t, budget); err != nil {
+					return nil, err
+				}
+			} else if err := d.Skip(); err != nil {
+				return nil, err
+			}
+		case xml.CharData:
+			if model == nil && text.Len()+len(t) <= maxDrawioBytes {
+				text.Write(t)
+			}
+		case xml.EndElement:
+			if model != nil {
+				return model, nil
+			}
+			decoded, err := inflateDrawio(text.String(), budget)
+			if err != nil {
+				return nil, err
+			}
+			inner := newDrawioDecoder(strings.NewReader(decoded))
+			start, err := nextStart(inner, budget)
+			if err != nil || start.Name.Local != "mxGraphModel" {
+				return nil, errors.New("not a diagram")
+			}
+			return parseDrawioModel(inner, start, budget)
+		}
+	}
+}
+
+// parseDrawioModel reads the cells of an <mxGraphModel> whose start tag was
+// just read, through its end tag.
+func parseDrawioModel(d *xml.Decoder, start xml.StartElement, budget *drawioBudget) (*drawioModel, error) {
+	model := &drawioModel{background: startAttr(start, "background")}
+	var cell *drawioCell
+	var wrapperID, wrapperLabel string
+	depth, wrapperDepth, cellDepth, geoDepth, pointsDepth := 1, 0, 0, 0, 0
+	for depth > 0 {
+		tok, err := d.Token()
+		if err != nil {
+			return nil, fmt.Errorf("the diagram is cut short: %v", err)
+		}
+		if err := budget.spend(); err != nil {
+			return nil, err
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			depth++
+			switch t.Name.Local {
+			case "UserObject", "object":
+				wrapperID, wrapperLabel, wrapperDepth = startAttr(t, "id"), startAttr(t, "label"), depth
+			case "mxCell":
+				if cell != nil || len(model.cells) >= maxDrawioCells {
+					break
+				}
+				cell = &drawioCell{ID: startAttr(t, "id"), Parent: startAttr(t, "parent"), Value: startAttr(t, "value"), Style: startAttr(t, "style"), Source: startAttr(t, "source"), Target: startAttr(t, "target")}
+				if wrapperDepth > 0 && wrapperDepth == depth-1 {
+					cell.ID, cell.Value = wrapperID, wrapperLabel
+				}
+				cell.Value, cell.Style = clipText(cell.Value, maxDrawioValue), clipText(cell.Style, maxDrawioStyle)
+				cell.Vertex, cell.Edge = startAttr(t, "vertex") == "1", startAttr(t, "edge") == "1"
+				cell.Hidden = startAttr(t, "visible") == "0"
+				cellDepth = depth
+			case "mxGeometry":
+				if cell != nil && cellDepth == depth-1 {
+					cell.X, cell.Y = parseFloat(startAttr(t, "x")), parseFloat(startAttr(t, "y"))
+					cell.W, cell.H = parseFloat(startAttr(t, "width")), parseFloat(startAttr(t, "height"))
+					cell.Relative = startAttr(t, "relative") == "1"
+					geoDepth = depth
+				}
+			case "Array":
+				if cell != nil && geoDepth > 0 && geoDepth == depth-1 && startAttr(t, "as") == "points" {
+					pointsDepth = depth
+				}
+			case "mxPoint":
+				if cell == nil || geoDepth == 0 {
+					break
+				}
+				p := drawioPoint{parseFloat(startAttr(t, "x")), parseFloat(startAttr(t, "y"))}
+				switch {
+				case pointsDepth > 0 && pointsDepth == depth-1:
+					if len(cell.Points) < maxDrawioPoints {
+						cell.Points = append(cell.Points, p)
+					}
+				case geoDepth == depth-1 && startAttr(t, "as") == "sourcePoint":
+					cell.SourcePoint = &p
+				case geoDepth == depth-1 && startAttr(t, "as") == "targetPoint":
+					cell.TargetPoint = &p
+				case geoDepth == depth-1 && startAttr(t, "as") == "offset":
+					cell.Offset = &p
+				}
+			}
+		case xml.EndElement:
+			switch depth {
+			case pointsDepth:
+				pointsDepth = 0
+			case geoDepth:
+				geoDepth = 0
+			case cellDepth:
+				cell.styles, cell.shape = parseDrawioStyle(cell.Style)
+				model.cells = append(model.cells, cell)
+				cell, cellDepth = nil, 0
+			case wrapperDepth:
+				wrapperDepth = 0
+			}
+			depth--
+		}
+	}
+	return model, nil
+}
+
 // inflateDrawio decodes a compressed page: base64 of raw deflate of the
 // URI-encoded XML.
-func inflateDrawio(text string) (string, error) {
+func inflateDrawio(text string, budget *drawioBudget) (string, error) {
 	text = strings.TrimSpace(text)
 	if strings.HasPrefix(text, "<") {
 		return text, nil
@@ -129,13 +300,18 @@ func inflateDrawio(text string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("compressed page: %v", err)
 	}
-	inflated, err := io.ReadAll(io.LimitReader(flate.NewReader(bytes.NewReader(raw)), maxDrawioBytes+1))
+	room := maxDrawioInflated - budget.inflated
+	if room <= 0 {
+		return "", errors.New("the diagram's pages are too large to draw here")
+	}
+	inflated, err := io.ReadAll(io.LimitReader(flate.NewReader(bytes.NewReader(raw)), int64(room)+1))
 	if err != nil {
 		return "", fmt.Errorf("compressed page: %v", err)
 	}
-	if len(inflated) > maxDrawioBytes {
-		return "", errors.New("compressed page is too large")
+	if len(inflated) > room {
+		return "", errors.New("the diagram's pages are too large to draw here")
 	}
+	budget.inflated += len(inflated)
 	if decoded, err := url.PathUnescape(string(inflated)); err == nil {
 		return decoded, nil
 	}
@@ -185,67 +361,6 @@ func parseFloat(s string) float64 {
 		return 0
 	}
 	return f
-}
-
-func pointOf(n xmlNode) drawioPoint {
-	return drawioPoint{parseFloat(n.attr("x")), parseFloat(n.attr("y"))}
-}
-
-func collectDrawioCells(root xmlNode) []*drawioCell {
-	var cells []*drawioCell
-	var add func(n xmlNode, wrapper *xmlNode)
-	add = func(n xmlNode, wrapper *xmlNode) {
-		if len(cells) >= maxDrawioCells {
-			return
-		}
-		switch n.XMLName.Local {
-		case "UserObject", "object":
-			if inner := n.child("mxCell"); inner != nil {
-				add(*inner, &n)
-			}
-			return
-		case "mxCell":
-		default:
-			return
-		}
-		c := &drawioCell{ID: n.attr("id"), Parent: n.attr("parent"), Value: n.attr("value"), Style: n.attr("style"), Source: n.attr("source"), Target: n.attr("target")}
-		if wrapper != nil {
-			c.ID = wrapper.attr("id")
-			c.Value = wrapper.attr("label")
-		}
-		c.Vertex, c.Edge = n.attr("vertex") == "1", n.attr("edge") == "1"
-		c.Hidden = n.attr("visible") == "0"
-		if geo := n.child("mxGeometry"); geo != nil {
-			c.X, c.Y = parseFloat(geo.attr("x")), parseFloat(geo.attr("y"))
-			c.W, c.H = parseFloat(geo.attr("width")), parseFloat(geo.attr("height"))
-			c.Relative = geo.attr("relative") == "1"
-			for _, child := range geo.Nodes {
-				switch {
-				case child.XMLName.Local == "mxPoint" && child.attr("as") == "sourcePoint":
-					p := pointOf(child)
-					c.SourcePoint = &p
-				case child.XMLName.Local == "mxPoint" && child.attr("as") == "targetPoint":
-					p := pointOf(child)
-					c.TargetPoint = &p
-				case child.XMLName.Local == "mxPoint" && child.attr("as") == "offset":
-					p := pointOf(child)
-					c.Offset = &p
-				case child.XMLName.Local == "Array" && child.attr("as") == "points":
-					for _, point := range child.Nodes {
-						if point.XMLName.Local == "mxPoint" {
-							c.Points = append(c.Points, pointOf(point))
-						}
-					}
-				}
-			}
-		}
-		c.styles, c.shape = parseDrawioStyle(c.Style)
-		cells = append(cells, c)
-	}
-	for _, n := range root.Nodes {
-		add(n, nil)
-	}
-	return cells
 }
 
 type drawioRect struct{ X, Y, W, H float64 }
@@ -299,12 +414,8 @@ func attrEscape(s string) string {
 
 func num(f float64) string { return strconv.FormatFloat(math.Round(f*100)/100, 'f', -1, 64) }
 
-func renderDrawioModel(model xmlNode) (string, error) {
-	root := model.child("root")
-	if root == nil {
-		return "", errors.New("the diagram has no root")
-	}
-	cells := collectDrawioCells(*root)
+func renderDrawioModel(model *drawioModel) string {
+	cells := model.cells
 	byID := map[string]*drawioCell{}
 	for _, c := range cells {
 		if c.ID != "" {
@@ -386,7 +497,7 @@ func renderDrawioModel(model xmlNode) (string, error) {
 	const pad = 12
 	minX, minY, maxX, maxY = minX-pad, minY-pad, maxX+pad, maxY+pad
 	width, height := maxX-minX, maxY-minY
-	background := drawioColor(model.attr("background"), "#ffffff")
+	background := drawioColor(model.background, "#ffffff")
 	if background == "none" {
 		background = "#ffffff"
 	}
@@ -407,7 +518,7 @@ func renderDrawioModel(model xmlNode) (string, error) {
 	fmt.Fprintf(&out, `<rect x="%s" y="%s" width="%s" height="%s" fill="%s"/>`, num(minX), num(minY), num(width), num(height), attrEscape(background))
 	out.WriteString(body.String())
 	out.WriteString("</svg>")
-	return out.String(), nil
+	return out.String()
 }
 
 func markerID(color string) string {
@@ -513,28 +624,40 @@ func drawioText(label string, r drawioRect, s map[string]string, halo bool) stri
 		size = 12
 	}
 	color := drawioColor(s["fontColor"], "#000000")
+	label = truncateRunes(label, maxDrawioLabel)
 	var lines []string
 	wrap := s["whiteSpace"] == "wrap"
-	maxChars := int(math.Max(4, (r.W-8)/(size*0.55)))
+	maxChars := int(math.Max(4, math.Min(400, (r.W-8)/(size*0.55))))
 	for _, line := range strings.Split(label, "\n") {
-		if !wrap || len([]rune(line)) <= maxChars {
+		if len(lines) >= maxDrawioLines {
+			break
+		}
+		if !wrap || utf8.RuneCountInString(line) <= maxChars {
 			lines = append(lines, line)
 			continue
 		}
-		var current string
+		// Word wrap in one pass: count runes as they are added.
+		var current strings.Builder
+		n := 0
 		for _, word := range strings.Fields(line) {
-			if current != "" && len([]rune(current))+1+len([]rune(word)) > maxChars {
-				lines = append(lines, current)
-				current = word
-				continue
+			w := utf8.RuneCountInString(word)
+			if n > 0 && n+1+w > maxChars {
+				lines = append(lines, current.String())
+				current.Reset()
+				n = 0
+				if len(lines) >= maxDrawioLines {
+					break
+				}
 			}
-			if current != "" {
-				current += " "
+			if n > 0 {
+				current.WriteByte(' ')
+				n++
 			}
-			current += word
+			current.WriteString(word)
+			n += w
 		}
-		if current != "" {
-			lines = append(lines, current)
+		if n > 0 && len(lines) < maxDrawioLines {
+			lines = append(lines, current.String())
 		}
 	}
 	lineHeight := size * 1.2

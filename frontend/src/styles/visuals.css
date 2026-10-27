@@ -201,6 +201,7 @@
 .visual-preview { display: grid; gap: 6px; margin: 0; }
 .visual-preview-box { position: relative; display: flex; flex-direction: column; height: 420px; overflow: hidden; resize: vertical; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--bg); }
 .visual-preview-box > .poll { overflow: auto; }
+.visual-preview-idle { display: grid; flex: 1; place-content: center; justify-items: center; gap: 10px; padding: 24px; text-align: center; }
 .visual-preview figcaption { font-size: var(--text-xs); }
 .visual-answer { display: grid; gap: 4px; margin: 0; padding-left: 18px; font-size: var(--text-lg); }
 .visual-note-quote { margin: 10px 0 0; padding: 8px 12px; border-left: 2px solid var(--line-strong); color: var(--ink-2); white-space: pre-wrap; }

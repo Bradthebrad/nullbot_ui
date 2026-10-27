@@ -22,9 +22,36 @@ type Props = {
   onRecorded?: (count: number) => void;
   /** Bumped to reload the visual from the start. */
   reloadKey?: number;
+  /** Receives a function that waits until the page has handed over its
+   *  last interactions, for Send to call first. */
+  onFlush?: (flush: () => Promise<void>) => void;
 };
 
-export function VisualSurface({visual, mode, onStaged, onRecorded, reloadKey = 0}: Props) {
+const MAX_EVENT_JSON = 16_000;
+const MAX_BATCH_JSON = 256_000;
+
+/** Interactions as the frame reported them, bounded before they reach Go. */
+export function boundedEvents(raw: unknown): VisualEvent[] {
+  if (!Array.isArray(raw)) return [];
+  const out: VisualEvent[] = [];
+  let total = 0;
+  for (const event of raw.slice(0, 300)) {
+    if (!event || typeof event !== 'object' || Array.isArray(event)) continue;
+    let json = '';
+    try {
+      json = JSON.stringify(event);
+    } catch {
+      continue;
+    }
+    const kept = json.length > MAX_EVENT_JSON ? {type: String((event as VisualEvent).type || 'event').slice(0, 40), t: (event as VisualEvent).t, note: 'too large to keep'} : (event as VisualEvent);
+    total += Math.min(json.length, MAX_EVENT_JSON);
+    if (total > MAX_BATCH_JSON) break;
+    out.push(kept);
+  }
+  return out;
+}
+
+export function VisualSurface({visual, mode, onStaged, onRecorded, reloadKey = 0, onFlush}: Props) {
   const [view, setView] = useState<VisualView | null>(null);
   const [error, setError] = useState('');
   const frame = useRef<HTMLIFrameElement>(null);
@@ -32,6 +59,12 @@ export function VisualSurface({visual, mode, onStaged, onRecorded, reloadKey = 0
   const callbacks = useRef({onStaged, onRecorded});
   callbacks.current = {onStaged, onRecorded};
   const live = mode === 'live';
+  const pending = useRef(new Set<Promise<unknown>>());
+  const flushWaiters = useRef(new Map<number, () => void>());
+  const flushSeq = useRef(0);
+  // When the page last said it was leaving, and when it last asked to move.
+  const leftAt = useRef(0);
+  const movedAt = useRef<number[]>([]);
 
   async function load(page = '') {
     try {
@@ -53,8 +86,38 @@ export function VisualSurface({visual, mode, onStaged, onRecorded, reloadKey = 0
     if (!live || !events.length) return;
     recorded.current += events.length;
     callbacks.current.onRecorded?.(recorded.current);
-    void api.recordVisualEvents(visual.id, events).catch(() => undefined);
+    const saving = api.recordVisualEvents(visual.id, events).catch(() => undefined);
+    pending.current.add(saving);
+    void saving.finally(() => pending.current.delete(saving));
   }
+
+  // A page may move a few times a second at most; more is a page looping.
+  function mayMove() {
+    const now = Date.now();
+    movedAt.current = movedAt.current.filter(t => now - t < 2000);
+    if (movedAt.current.length >= 4) return false;
+    movedAt.current.push(now);
+    return true;
+  }
+
+  useEffect(() => {
+    onFlush?.(async () => {
+      const win = frame.current?.contentWindow;
+      if (win) {
+        const id = ++flushSeq.current;
+        await new Promise<void>(resolve => {
+          const timer = window.setTimeout(resolve, 600);
+          flushWaiters.current.set(id, () => {
+            window.clearTimeout(timer);
+            resolve();
+          });
+          win.postMessage({__nullbot: 1, type: 'flush', id}, '*');
+        });
+        flushWaiters.current.delete(id);
+      }
+      await Promise.allSettled([...pending.current]);
+    });
+  }, [onFlush, view]);
 
   // Messages from the visual's frame. Only that frame is listened to, and
   // what it sends is treated as data.
@@ -69,7 +132,13 @@ export function VisualSurface({visual, mode, onStaged, onRecorded, reloadKey = 0
           win.postMessage({__nullbot: 1, type: 'context', context: {title: visual.title, prompt: visual.prompt || '', theme: document.documentElement.dataset.appearance === 'dark' ? 'dark' : 'light', labels: visual.labels || []}}, '*');
           break;
         case 'events':
-          if (Array.isArray(data.events)) record(data.events.slice(0, 500).filter((e: unknown) => e && typeof e === 'object'));
+          record(boundedEvents(data.events));
+          break;
+        case 'flushed':
+          flushWaiters.current.get(Number(data.id))?.();
+          break;
+        case 'leaving':
+          leftAt.current = Date.now();
           break;
         case 'response':
           if (live) callbacks.current.onStaged?.({data: data.data, requested: false});
@@ -78,7 +147,7 @@ export function VisualSurface({visual, mode, onStaged, onRecorded, reloadKey = 0
           if (live) callbacks.current.onStaged?.({data: data.data, requested: true});
           break;
         case 'navigate':
-          if (typeof data.page === 'string') void load(data.page);
+          if (typeof data.page === 'string' && data.page.length < 1000 && mayMove()) void load(data.page);
           break;
         case 'external':
           toast('Links to the web don’t open from a visual.', 'info');
@@ -89,9 +158,13 @@ export function VisualSurface({visual, mode, onStaged, onRecorded, reloadKey = 0
     return () => window.removeEventListener('message', onMessage);
   }, [visual.id, visual.title, visual.prompt, live]);
 
-  // The frame tried to open a page itself; show it the safe way.
+  // The page navigated its frame itself (a script set location); show the
+  // new page the safe way. A frame inside the page asking for a page is not
+  // the page leaving, so it changes nothing.
   useEffect(() => onVisualNavigate(nav => {
-    if (nav.id === visual.id) void load(nav.page);
+    if (nav.id !== visual.id || Date.now() - leftAt.current > 3000 || !mayMove()) return;
+    leftAt.current = 0;
+    void load(nav.page);
   }), [visual.id]);
 
   if (error) return <Blank title="This visual can’t be shown">{error}</Blank>;

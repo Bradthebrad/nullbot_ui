@@ -5,6 +5,7 @@ import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/
 import {installBridge, type FakeBridge} from '../../test/bridge';
 import {VisualWindow} from './VisualWindow';
 import {VisualsView} from './VisualsView';
+import {boundedEvents} from './VisualSurface';
 import {handleLiveVisuals, resetVisuals, visualStore} from '../../state/visuals';
 import {appStore} from '../../state/app';
 import {DialogHost} from '../../ui/dialogs';
@@ -83,6 +84,37 @@ describe('Visual window', () => {
     fireEvent.click(within(win).getByRole('button', {name: 'Skip'}));
     await waitFor(() => expect(bridge.callsTo('RespondVisualization')).toHaveLength(1));
     expect(bridge.callsTo('RespondVisualization')[0][0]).toEqual({id: page.id, response: null, note: '', dismiss: true});
+  });
+
+  it('follows the page only when the page itself is leaving', async () => {
+    mount();
+    act(() => handleLiveVisuals([{...page, waiting: true}]));
+    const win = await screen.findByRole('dialog', {name: 'Visual: Checkout prototype'});
+    const frame = await waitFor(() => win.querySelector('iframe') as HTMLIFrameElement);
+    bridge.set('VisualPage', (id: string, _origin: string, p: string) => ({visual: page, document: `<p>${p}</p>`, page: p}));
+    // A frame inside the page asked for widget.html: nothing changes.
+    act(() => bridge.emit('visual-navigate', {id: page.id, page: 'widget.html'}));
+    expect(bridge.callsTo('VisualPage')).toHaveLength(0);
+    // The page says it is leaving, then the server sees the new page.
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {data: {__nullbot: 1, type: 'leaving'}, source: frame.contentWindow}));
+    });
+    act(() => bridge.emit('visual-navigate', {id: page.id, page: 'thanks.html'}));
+    await waitFor(() => expect(bridge.callsTo('VisualPage').map(c => c[2])).toEqual(['thanks.html']));
+    // A page that keeps moving is held back.
+    for (let i = 0; i < 8; i++) act(() => {
+      window.dispatchEvent(new MessageEvent('message', {data: {__nullbot: 1, type: 'navigate', page: `p${i}.html`}, source: frame.contentWindow}));
+    });
+    await waitFor(() => expect(bridge.callsTo('VisualPage').length).toBeLessThanOrEqual(4));
+  });
+
+  it('bounds what a page can report', () => {
+    const huge = 'x'.repeat(20_000);
+    const out = boundedEvents([{type: 'click'}, {type: 'custom', data: huge}, null, 'text', [1], ...Array.from({length: 400}, (_, i) => ({type: 'key', key: String(i)}))]);
+    expect(out[0]).toEqual({type: 'click'});
+    expect(out[1]).toMatchObject({type: 'custom', note: 'too large to keep'});
+    expect(out.length).toBeLessThanOrEqual(300);
+    expect(boundedEvents({not: 'a list'})).toEqual([]);
   });
 
   it('asks before closing a visual NullBot is waiting on, and minimizes to a pill', async () => {

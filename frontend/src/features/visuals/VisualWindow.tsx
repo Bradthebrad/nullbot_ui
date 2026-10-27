@@ -28,6 +28,7 @@ export function VisualWindow() {
   const {tabs, active, minimized, maximized, known, live, rect} = useStore(visualStore, state => state);
   const [states, setStates] = useState<Record<string, TabState>>({});
   const box = useRef<HTMLDivElement>(null);
+  const flushers = useRef(new Map<string, () => Promise<void>>());
   const [place, setPlace] = useState<WindowRect>(() => clampRect(rect || defaultRect()));
 
   const visuals = tabs.map(id => live.find(v => v.id === id) || known[id]).filter(Boolean) as Visualization[];
@@ -88,7 +89,7 @@ export function VisualWindow() {
     const state = tab(visual.id);
     patch(visual.id, {sending: true});
     // Let the page hand over its last interactions first.
-    await new Promise(resolve => setTimeout(resolve, 320));
+    await flushers.current.get(visual.id)?.();
     const done = await respondToVisual(visual.id, dismiss ? null : state.staged?.data ?? null, dismiss ? '' : state.note.trim(), dismiss);
     if (done) setStates(all => {
       const next = {...all};
@@ -151,6 +152,7 @@ export function VisualWindow() {
               reloadKey={tab(v.id).reloadKey}
               onStaged={staged => patch(v.id, {staged: staged.data == null && !staged.requested ? null : staged})}
               onRecorded={count => patch(v.id, {recorded: count})}
+              onFlush={flush => flushers.current.set(v.id, flush)}
             />
           </div>
         ))}

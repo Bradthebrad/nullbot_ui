@@ -39,7 +39,7 @@ func compressDrawio(t *testing.T, xml string) string {
 
 func TestDrawioRendersShapesTextAndConnectors(t *testing.T) {
 	file := `<mxfile><diagram name="Overview">` + compressDrawio(t, sampleDiagram) + `</diagram><diagram name="Plain">` + sampleDiagram + `</diagram></mxfile>`
-	pages, err := drawioPages([]byte(file))
+	pages, err := drawioPages([]byte(file), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,13 +66,13 @@ func TestDrawioRendersShapesTextAndConnectors(t *testing.T) {
 		t.Error("HTML label markup leaked into the SVG")
 	}
 	for _, bad := range []string{"<html/>", "<mxfile></mxfile>", "not xml"} {
-		if _, err := drawioPages([]byte(bad)); err == nil {
+		if _, err := drawioPages([]byte(bad), 0); err == nil {
 			t.Errorf("%q accepted", bad)
 		}
 	}
 	// Text that tries to break out of the SVG stays text.
 	evil := strings.Replace(sampleDiagram, `value="Database"`, `value="&lt;/svg&gt;&lt;script&gt;x()&lt;/script&gt;"`, 1)
-	pages, _ = drawioPages([]byte(evil))
+	pages, _ = drawioPages([]byte(evil), 0)
 	if strings.Contains(pages[0].SVG, "<script>") {
 		t.Fatal("label markup became script")
 	}
@@ -85,9 +85,13 @@ func TestVisualDocumentRunsTheBridgeFirstAndLimitsLoads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	head := doc[strings.Index(doc, "<head>")+6:]
-	if !strings.HasPrefix(head, `<base href="http://wails.localhost/__vis/0123456789abcdef0123456789abcdef/web/app/">`) {
-		t.Fatalf("base not first: %.200s", head)
+	if !strings.HasPrefix(doc, `<!doctype html><base href="http://wails.localhost/__vis/0123456789abcdef0123456789abcdef/web/app/">`) {
+		t.Fatalf("base not first: %.200s", doc)
+	}
+	// A <head> in a comment or script before the real one changes nothing.
+	tricky, _ := visualDocument([]byte(`<!-- <head> --><script>var s = "<head>"</script><html><head></head></html>`), "http://wails.localhost", "0123456789abcdef0123456789abcdef", "", "", site)
+	if !strings.HasPrefix(tricky, `<base href=`) {
+		t.Fatalf("injected after a decoy head: %.120s", tricky)
 	}
 	if strings.Index(doc, "window.nullbot") > strings.Index(doc, "<title>") {
 		t.Fatal("bridge runs after the page's own content")
@@ -310,5 +314,96 @@ func TestVisualResponsesReachTheBot(t *testing.T) {
 	}
 	if len(a.Visualizations("")) != 0 {
 		t.Fatal("not deleted")
+	}
+}
+
+func twoProjectVisualApp(t *testing.T, primaryPerm, otherPerm string) (*App, string, string) {
+	t.Helper()
+	c := nullbot.DefaultConfig()
+	c.AppDir = t.TempDir()
+	primary, other := t.TempDir(), t.TempDir()
+	c.WorkspaceDir = primary
+	c.Projects = []nullbot.Project{{ID: "primary", Name: "Primary", Path: primary, Permission: primaryPerm}, {ID: "other", Name: "Other", Path: other, Permission: otherPerm}}
+	c.PrimaryProjectID = "primary"
+	c.SkillDirs = []string{filepath.Join(c.AppDir, "skills")}
+	a := permissionApp(c)
+	a.bot.EnableVisuals()
+	return a, primary, other
+}
+
+func serveVisual(a *App, path string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodGet, "http://wails.localhost"+path, nil)
+	rec := httptest.NewRecorder()
+	a.assetHandler().ServeHTTP(rec, req)
+	return rec
+}
+
+func TestPlantedRecordsNeverOpen(t *testing.T) {
+	a, untrusted, other := twoProjectVisualApp(t, "read-only", "read-only")
+	id := "vis-20990101-000000-abcdef"
+	dir := filepath.Join(untrusted, ".nullbot", "visualizations", id)
+	root, _ := json.Marshal(other)
+	writeFile(t, filepath.Join(dir, "visual.json"), []byte(`{"id":"`+id+`","title":"Design review","kind":"html","status":"open","root":`+string(root)+`,"allow_network":true,"content_file":"content.html","created_at":"2099-01-01T00:00:00Z","updated_at":"2099-01-01T00:00:00Z","note":"planted"}`))
+	writeFile(t, filepath.Join(dir, "content.html"), []byte(`<p>planted</p>`))
+	if list := a.Visualizations(""); len(list) != 0 {
+		t.Fatalf("planted record listed: %+v", list)
+	}
+	if _, err := a.OpenVisualization(id, "http://wails.localhost"); err == nil {
+		t.Fatal("planted record opened")
+	}
+}
+
+func TestSitesStayInsideTheirFolderAndPermissions(t *testing.T) {
+	a, primary, other := twoProjectVisualApp(t, "full", "read-only")
+	writeFile(t, filepath.Join(primary, "web", "index.html"), []byte(`<p>home</p>`))
+	writeFile(t, filepath.Join(other, "private.txt"), []byte("outside-the-site"))
+	linked := os.Symlink(filepath.Join(other, "private.txt"), filepath.Join(primary, "web", "x.txt")) == nil
+	id := callVisualize(t, a, map[string]any{"title": "Site", "path": filepath.Join(primary, "web", "index.html"), "allow_network": true})
+	view, _ := a.OpenVisualization(id, "http://wails.localhost")
+	if !strings.Contains(view.Document, "default-src *") {
+		t.Fatal("network visual in a Full project has no network")
+	}
+	token := srcdocToken.FindStringSubmatch(view.Document)[1]
+	if linked {
+		if rec := serveVisual(a, "/__vis/"+token+"/x.txt"); rec.Code != 404 {
+			t.Fatalf("followed a link out of the site: %d", rec.Code)
+		}
+	}
+	// Taking Full away takes the internet away, even from a visual made
+	// while it was allowed.
+	if err := a.bot.UpdateConfig(func(c *nullbot.Config) { c.Projects[0].Permission = "read-write" }); err != nil {
+		t.Fatal(err)
+	}
+	view, _ = a.OpenVisualization(id, "http://wails.localhost")
+	if strings.Contains(view.Document, "default-src *") {
+		t.Fatal("network kept after the project lost Full")
+	}
+}
+
+func TestProjectSitesDontServeVisualRecords(t *testing.T) {
+	a := visualUIApp(t, "read-write")
+	dir := a.bot.Config().WorkspaceDir
+	earlier := callVisualize(t, a, map[string]any{"title": "Earlier", "content": "<p>x</p>"})
+	a.RecordVisualEvents(earlier, []map[string]any{{"type": "change", "value": "typed text"}})
+	writeFile(t, filepath.Join(dir, "index.html"), []byte(`<p>home</p>`))
+	id := callVisualize(t, a, map[string]any{"title": "Site", "path": filepath.Join(dir, "index.html")})
+	view, _ := a.OpenVisualization(id, "http://wails.localhost")
+	token := srcdocToken.FindStringSubmatch(view.Document)[1]
+	for _, path := range []string{"/.nullbot/visualizations/" + earlier + "/events.jsonl", "/.NullBot/visualizations/" + earlier + "/visual.json", "/.nullbot/.gitignore"} {
+		if rec := serveVisual(a, "/__vis/"+token+path); rec.Code != 404 {
+			t.Errorf("%s served: %d", path, rec.Code)
+		}
+	}
+	if out, _ := a.VisualPage(id, "http://wails.localhost", ".nullbot/visualizations/"+earlier+"/content.html"); out.Error == "" {
+		t.Fatal("a record shown as a page")
+	}
+	// A page fetched as data is served; one navigated to is not.
+	writeFile(t, filepath.Join(dir, "partial.html"), []byte(`<b>partial</b>`))
+	req := httptest.NewRequest(http.MethodGet, "http://wails.localhost/__vis/"+token+"/partial.html", nil)
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	rec := httptest.NewRecorder()
+	a.assetHandler().ServeHTTP(rec, req)
+	if rec.Code != 200 || rec.Body.String() != "<b>partial</b>" || !strings.Contains(rec.Header().Get("Content-Security-Policy"), "sandbox") {
+		t.Fatalf("fetched page: %d %q", rec.Code, rec.Body.String())
 	}
 }

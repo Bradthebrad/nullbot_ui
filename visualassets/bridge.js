@@ -279,7 +279,14 @@
 
   window.addEventListener('hashchange', function () { record('navigate', {url: clip(location.hash, 300)}); });
   window.addEventListener('popstate', function () { record('navigate', {url: clip(location.hash, 300)}); });
-  window.addEventListener('pagehide', flush);
+  // The app follows this page to another only when it says it is leaving
+  // (a frame inside the page asking for a page is not this page leaving).
+  function leaving() {
+    flush();
+    post({type: 'leaving'});
+  }
+  window.addEventListener('beforeunload', leaving);
+  window.addEventListener('pagehide', leaving);
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') flush(); });
 
   var context = {};
