@@ -159,9 +159,9 @@ hand, local or remote.
 | [Web](https://github.com/Bradthebrad/nullbot-web-mcp) | Web search, readable page fetches, browser automation and testing |
 | [Parsers](https://github.com/Bradthebrad/nullbot-parsers-mcp) | Text, tables and metadata from PDF, Office, EPUB, archives and notebooks |
 | [Image Tools](https://github.com/Bradthebrad/nullbot-imagetools-mcp) | Image generation and editing, thumbnails, contact sheets, PDFs |
-| [Email](https://github.com/Bradthebrad/nullbot-emails-mcp) | Gmail and Outlook (not released yet) |
-| [Drives](https://github.com/Bradthebrad/nullbot-drives-mcp) | Google Drive, OneDrive, synced folders, read only (not released yet) |
-| [Messages](https://github.com/Bradthebrad/nullbot-messages-mcp) | Discord, Telegram, Twilio SMS, WhatsApp Business, Signal bridge (not released yet) |
+| [Email](https://github.com/Bradthebrad/nullbot-emails-mcp) | Gmail and Outlook |
+| [Drives](https://github.com/Bradthebrad/nullbot-drives-mcp) | Google Drive, OneDrive, synced folders, read only |
+| [Messages](https://github.com/Bradthebrad/nullbot-messages-mcp) | Discord, Telegram, Twilio SMS, WhatsApp Business, Signal bridge |
 
 Skill packs for web search, browser automation and research, API probing and
 building MCP servers come from
