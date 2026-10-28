@@ -313,6 +313,7 @@ tr.is-blocked .tool-title { color: var(--ink-3); }
 .pkg-perms { display: flex; flex-wrap: wrap; gap: 4px; }
 .market-table td { padding-top: 10px; padding-bottom: 10px; }
 .pkg-action { width: 1%; text-align: right; white-space: nowrap; }
+.pkg-note { margin-right: 10px; font-size: var(--text-sm); }
 
 /* -------------------------------------------------------------- history */
 
