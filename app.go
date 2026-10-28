@@ -1218,6 +1218,9 @@ func (a *App) InstallMarketPackage(id string, small bool, enable bool) (MarketSt
 	if err != nil {
 		return a.marketState(false), err
 	}
+	if pkg.Kind == "mcp_server" {
+		a.bot.StopMCPServer(pkg.ID) // the old build stops; the new one starts on next use
+	}
 	if enable && pkg.Kind == "mcp_server" {
 		next, err := nullbot.EnableMCPServer(config, pkg.ID)
 		if err != nil {

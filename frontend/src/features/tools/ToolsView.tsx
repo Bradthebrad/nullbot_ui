@@ -566,9 +566,9 @@ function MarketTab() {
                 </td>
                 <td><div className="pkg-perms">{(pkg.permissions || []).map(p => <span key={p} className="tag" title={p}>{marketPermission(p)}</span>)}</div></td>
                 <td className="pkg-action">
-                  {pkg.status === 'unreleased' && !pkg.installed
-                    ? <span className="faint" title="This package has no release to install yet">Not released yet</span>
-                    : <button className="btn btn-sm" disabled={!!installing} onClick={() => void install(pkg)}>{installing === pkg.id ? <span className="spinner" /> : null}{pkg.installed ? 'Reinstall' : 'Install'}</button>}
+                  {/* Install looks up the newest release itself, so a catalog that hasn't seen one yet doesn't block it. */}
+                  {pkg.status === 'unreleased' && !pkg.installed && <span className="faint pkg-note">No release seen yet</span>}
+                  <button className="btn btn-sm" disabled={!!installing} onClick={() => void install(pkg)}>{installing === pkg.id ? <span className="spinner" /> : null}{pkg.installed ? 'Reinstall' : 'Install'}</button>
                 </td>
               </tr>
             ))}

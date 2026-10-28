@@ -1,5 +1,5 @@
 // The marketplace: versions come from releases, permissions read as plain
-// words, and a package with no release can't be installed.
+// words, and a package with no release seen yet can still be installed.
 import {beforeEach, describe, expect, it} from 'vitest';
 import {render, screen, within} from '@testing-library/react';
 import {installBridge} from '../../test/bridge';
@@ -18,7 +18,7 @@ beforeEach(() => {
 });
 
 describe('Marketplace', () => {
-  it('shows release versions, plain permissions, and holds back unreleased packages', async () => {
+  it('shows release versions, plain permissions, and notes packages with no release seen', async () => {
     render(<ToolsView />);
     const web = (await screen.findByText('NullBot Web MCP')).closest('tr')!;
     expect(within(web).getByText('v0.2.0')).toBeTruthy();
@@ -26,8 +26,9 @@ describe('Marketplace', () => {
     expect(within(web).getByText('control a browser')).toBeTruthy();
     expect(within(web).getByRole('button', {name: 'Reinstall'})).toBeTruthy();
     const email = screen.getByText('NullBot Email MCP').closest('tr')!;
-    expect(within(email).getByText('Not released yet')).toBeTruthy();
-    expect(within(email).queryByRole('button')).toBeNull();
+    // Install still works: it looks up the newest release itself.
+    expect(within(email).getByText('No release seen yet')).toBeTruthy();
+    expect(within(email).getByRole('button', {name: 'Install'})).toBeTruthy();
     expect(within(email).getByText('some new thing')).toBeTruthy();
     const skill = screen.getByText('API Probe Skill').closest('tr')!;
     expect(within(skill).getByText('Skill')).toBeTruthy();
