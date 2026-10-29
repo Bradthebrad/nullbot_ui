@@ -533,3 +533,63 @@ export function Visualization(arg1) {
 export function Visualizations(arg1) {
   return window['go']['main']['App']['Visualizations'](arg1);
 }
+
+export function LocalEndpoints(arg1) {
+  return window['go']['main']['App']['LocalEndpoints'](arg1);
+}
+
+export function SaveLocalEndpoint(arg1,arg2) {
+  return window['go']['main']['App']['SaveLocalEndpoint'](arg1,arg2);
+}
+
+export function RemoveLocalEndpoint(arg1) {
+  return window['go']['main']['App']['RemoveLocalEndpoint'](arg1);
+}
+
+export function FindLocalServers() {
+  return window['go']['main']['App']['FindLocalServers']();
+}
+
+export function LocalServerKinds() {
+  return window['go']['main']['App']['LocalServerKinds']();
+}
+
+export function PullLocalModel(arg1,arg2) {
+  return window['go']['main']['App']['PullLocalModel'](arg1,arg2);
+}
+
+export function CancelLocalPull(arg1,arg2) {
+  return window['go']['main']['App']['CancelLocalPull'](arg1,arg2);
+}
+
+export function CopyLocalModelWithContext(arg1,arg2,arg3) {
+  return window['go']['main']['App']['CopyLocalModelWithContext'](arg1,arg2,arg3);
+}
+
+export function DeleteLocalModel(arg1,arg2) {
+  return window['go']['main']['App']['DeleteLocalModel'](arg1,arg2);
+}
+
+export function SearchHFModels(arg1,arg2,arg3) {
+  return window['go']['main']['App']['SearchHFModels'](arg1,arg2,arg3);
+}
+
+export function HFBuilds(arg1) {
+  return window['go']['main']['App']['HFBuilds'](arg1);
+}
+
+export function InstallModel(arg1) {
+  return window['go']['main']['App']['InstallModel'](arg1);
+}
+
+export function CancelInstall(arg1) {
+  return window['go']['main']['App']['CancelInstall'](arg1);
+}
+
+export function MachineHardware(arg1) {
+  return window['go']['main']['App']['MachineHardware'](arg1);
+}
+
+export function SuggestModels(arg1) {
+  return window['go']['main']['App']['SuggestModels'](arg1);
+}

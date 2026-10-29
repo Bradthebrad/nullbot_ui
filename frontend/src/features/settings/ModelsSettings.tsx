@@ -8,7 +8,9 @@ import type {ModelGroup} from '../../lib/types';
 import {appStore} from '../../state/app';
 import {toastError} from '../../ui/toast';
 import {Group, NumberField, SaveBar, useConfigDraft} from './form';
-import {ModelFields, invalidWindows, providerNames, providerReady, type ModelValue} from './modelFields';
+import {ModelFields, invalidWindows, providerLabel, providerReady, type ModelValue} from './modelFields';
+import {LocalServers} from './LocalServers';
+import {ModelInstall} from './ModelInstall';
 
 const managed = ['model', 'subagent_model', 'agent.max_subagents', 'compaction.context_windows'];
 
@@ -72,6 +74,10 @@ export function ModelsSettings() {
         </div>
       </Group>
 
+      <LocalServers />
+
+      <ModelInstall />
+
       <Catalog groups={groups} runtime={runtime} manager={keyOf(manager)} subagent={following ? keyOf(manager) : keyOf(subagent)} onAssign={assign} />
 
       <SaveBar dirty={dirty} saving={saving} error={dirty ? invalid : ''} onSave={() => void save('Models saved. They apply from the next request.')} onDiscard={discard} />
@@ -113,7 +119,7 @@ function Catalog({groups, runtime, manager, subagent, onAssign}: {groups: ModelG
         <div className="segmented provider-tabs" role="radiogroup" aria-label="Provider">
           {groups.map(group => (
             <button key={group.provider} type="button" role="radio" aria-checked={group.provider === selected?.provider} className={group.provider === selected?.provider ? 'active' : ''} onClick={() => setProvider(group.provider)}>
-              {providerNames[group.provider] || group.provider}<span className="num faint"> {group.models?.length || 0}</span>
+              {providerLabel(group.provider, groups)}<span className="num faint"> {group.models?.length || 0}</span>
             </button>
           ))}
         </div>
@@ -121,7 +127,7 @@ function Catalog({groups, runtime, manager, subagent, onAssign}: {groups: ModelG
         <button type="button" className="btn" disabled={loading} onClick={() => void refresh(true)}>{loading ? 'Refreshing…' : 'Refresh list'}</button>
       </div>
       {error && <p className="notice bad" role="alert">{error}</p>}
-      {selected?.error && <p className="notice bad" role="alert">{providerNames[selected.provider] || selected.provider}: {selected.error}</p>}
+      {selected?.error && <p className="notice bad" role="alert">{providerLabel(selected.provider, groups)}: {selected.error}</p>}
       {ready === false && <p className="notice">This provider isn’t set up yet. You can still pick its models; set it up in Accounts before using them.</p>}
       {!models.length && <p className="muted">{q ? 'No models match. Clear the search or try another provider.' : 'No models listed. Refresh the list.'}</p>}
       <div className="model-list">
