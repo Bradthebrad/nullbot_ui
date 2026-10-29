@@ -2,7 +2,8 @@ import {useEffect, useMemo, useRef, useState} from 'react';
 import {ChevronDown, CornerDownLeft, Layers, Paperclip, Play, Square, X} from 'lucide-react';
 import {useStore} from '../../lib/store';
 import {api} from '../../lib/bindings';
-import {chatStore, isBusy, resumeRuns, runPhase, sendChat, stopRun} from '../../state/chat';
+import {isBusy, runPhase} from '../../state/chat';
+import {useChat, useChatState} from './ChatContext';
 import {appStore} from '../../state/app';
 import {useComposerDraft} from '../../useComposerDraft';
 import {useAttachments} from '../../useAttachments';
@@ -10,7 +11,7 @@ import {attachmentSendBlock, handleAttachmentPaste} from '../../attachments';
 import AttachmentTray from '../../AttachmentTray';
 import BusySendDialog from '../../BusySendDialog';
 import {SkillComposer, useSkillContext} from '../../SkillComposer';
-import {removeQueuedChat, type ChatMode} from '../../chatSubmission';
+import {type ChatMode} from '../../chatSubmission';
 import {MenuButton} from '../../ui/Menu';
 import {ContextMeter} from './ContextMeter';
 import {toast, toastError} from '../../ui/toast';
@@ -31,11 +32,12 @@ function slashToken(text: string, caret: number): {start: number; word: string} 
 export function Composer({active}: {active: boolean}) {
   const {input, setInput, undo, redo} = useComposerDraft();
   const {attachments, queue} = useAttachments();
-  const busy = useStore(chatStore, isBusy);
-  const phase = useStore(chatStore, runPhase);
-  const sending = useStore(chatStore, state => state.sending);
-  const submissions = useStore(chatStore, state => state.submissions);
-  const commands = useStore(chatStore, state => state.commands);
+  const chat = useChat();
+  const busy = useChatState(isBusy);
+  const phase = useChatState(runPhase);
+  const sending = useChatState(state => state.sending);
+  const submissions = useChatState(state => state.submissions);
+  const commands = useChatState(state => state.commands);
   const suggestSkills = useStore(appStore, state => !!state.config?.ui?.suggest_matching_skills);
   const botName = useStore(appStore, state => state.runtime.bot_name || 'NullBot');
   const [skills, setSkills] = useState<SkillFile[]>([]);
@@ -61,11 +63,11 @@ export function Composer({active}: {active: boolean}) {
     api.skills().then(list => setSkills(list || [])).catch(() => undefined);
   }, [active]);
 
-  const attachRequest = useStore(chatStore, state => state.attachRequest);
+  const attachRequest = useChatState(state => state.attachRequest);
   useEffect(() => {
     if (!attachRequest) return;
     void queue.stagePaths(attachRequest.paths);
-    chatStore.set({attachRequest: null});
+    chat.store.set({attachRequest: null});
     window.setTimeout(() => textarea.current?.focus(), 0);
   }, [attachRequest]);
 
@@ -179,7 +181,7 @@ export function Composer({active}: {active: boolean}) {
     const command = text.startsWith('/');
     const sendSkills = command ? [] : [...new Set([...picked.map(s => s.path), ...(leading ? [leading.path] : []), ...skillContext.paths])];
     try {
-      const accepted = await sendChat({mode: mode || 'normal', text, attachments: [...staged], skills: sendSkills, targetJob: submissions.primary_id});
+      const accepted = await chat.send({mode: mode || 'normal', text, attachments: [...staged], skills: sendSkills, targetJob: submissions.primary_id});
       if (!accepted) return;
       remember(text);
       if (revision.current === sentRevision) setInput('');
@@ -258,7 +260,7 @@ export function Composer({active}: {active: boolean}) {
               hint: 'Remove',
               onSelect: async () => {
                 try {
-                  chatStore.set({submissions: await removeQueuedChat(job.id)});
+                  await chat.removeQueued(job.id);
                   toast('Removed from the queue.');
                 } catch (error) {
                   toastError(error);
@@ -347,9 +349,9 @@ export function Composer({active}: {active: boolean}) {
             <Layers size={15} />Ask on the side
           </button>
           {busy && !input.trim() && !attachments.length && phase === 'paused' ? (
-            <button className="btn btn-primary" onClick={() => void resumeRuns()}><Play size={13} />Resume</button>
+            <button className="btn btn-primary" onClick={() => void chat.resume()}><Play size={13} />Resume</button>
           ) : busy && !input.trim() && !attachments.length && phase !== 'held' ? (
-            <button className="btn btn-primary" disabled={phase === 'stopping'} title="Finish the current step, then wrap up with what was done" onClick={() => void stopRun()}><Square size={13} />{phase === 'stopping' ? 'Stopping' : 'Stop'}</button>
+            <button className="btn btn-primary" disabled={phase === 'stopping'} title="Finish the current step, then wrap up with what was done" onClick={() => void chat.stop()}><Square size={13} />{phase === 'stopping' ? 'Stopping' : 'Stop'}</button>
           ) : busy ? (
             <div className="split">
               <button className="btn btn-primary" disabled={!canSend} onClick={() => void send('queue')}>Queue</button>

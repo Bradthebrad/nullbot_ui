@@ -6,12 +6,11 @@ import {useResource} from '../../lib/useResource';
 import {firstLine, formatDateTime, formatTime, humanizeName, shorten} from '../../lib/format';
 import type {HistoryEntry, HistoryQuery, SavedToolCall, SessionSummary} from '../../lib/types';
 import {appStore, setView} from '../../state/app';
-import {chatStore, isBusy} from '../../state/chat';
-import {reconcileChatHistory} from '../chat/transcript';
+import {chatsStore, showChat} from '../../state/chats';
 import {Blank, DetailHeader, ListGroup, ListRow, Panes, Spinner} from '../../ui/layout';
 import {Markdown} from '../../ui/Markdown';
 import {Segmented} from '../../ui/Tabs';
-import {confirmDialog, promptDialog} from '../../ui/dialogs';
+import {promptDialog} from '../../ui/dialogs';
 import {toast, toastError} from '../../ui/toast';
 
 type Period = 'any' | 'today' | '7d' | '30d';
@@ -170,7 +169,6 @@ function SessionDetail({session, query, terms}: {session: SessionSummary; query:
   const toolHits = (hits?.hits || []).some(h => h.kind === 'tool');
   const tools = showTools || toolHits;
   const {data, error, loading} = useResource(() => api.sessionEntries(session.session_id, tools), {deps: [session.session_id, tools]});
-  const busy = useStore(chatStore, isBusy);
   const botName = useStore(appStore, state => state.runtime.bot_name || 'NullBot');
   const [loadingSession, setLoadingSession] = useState(false);
   const body = useRef<HTMLDivElement>(null);
@@ -184,14 +182,16 @@ function SessionDetail({session, query, terms}: {session: SessionSummary; query:
     first?.scrollIntoView({block: 'center'});
   }, [hitKeys, entries.length]);
 
+  // A saved conversation continues in a chat of its own, so nothing on
+  // screen is replaced.
   async function load() {
-    if (chatStore.get().messages.length && !(await confirmDialog({title: 'Continue this conversation?', body: 'It replaces the conversation on screen. The current one stays in history.', confirmLabel: 'Continue it'}))) return;
     setLoadingSession(true);
     try {
-      const reply = await api.loadSession(session.session_id, 120);
-      chatStore.set({messages: reconcileChatHistory([], reply.history || []), commandOutput: null});
+      const info = await api.continueChat(session.session_id);
+      chatsStore.set(state => ({list: state.list.some(c => c.id === info.id) ? state.list : [...state.list, info]}));
+      showChat(info.id);
       setView('chat');
-      toast('Conversation loaded.', 'success');
+      toast(`Continuing “${info.title}” in its own chat.`, 'success');
     } catch (err) {
       toastError(err);
     } finally {
@@ -207,7 +207,7 @@ function SessionDetail({session, query, terms}: {session: SessionSummary; query:
         actions={
           <>
             <label className="check"><input type="checkbox" checked={tools} disabled={toolHits} onChange={event => setShowTools(event.target.checked)} />Show tool calls</label>
-            <button className="btn btn-primary" disabled={busy || loadingSession} title={busy ? 'Wait for the current request to finish' : undefined} onClick={() => void load()}>
+            <button className="btn btn-primary" disabled={loadingSession} onClick={() => void load()}>
               {loadingSession && <span className="spinner" />}Continue this conversation
             </button>
           </>

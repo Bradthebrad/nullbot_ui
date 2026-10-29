@@ -21,11 +21,31 @@ export function BeginCodexLogin():Promise<app.CodexDeviceFlow>;
 
 export function BuildUsageReport(arg1:main.UsageFilter,arg2:boolean):Promise<main.UsageReport>;
 
+export function CancelChatTask(arg1:string,arg2:string):Promise<Array<app.AgentTask>>;
+
 export function CancelScheduledTask(arg1:string):Promise<Array<app.ScheduledTask>>;
 
 export function CancelTask(arg1:string):Promise<Array<app.AgentTask>>;
 
+export function ChatAnalyze(arg1:string,arg2:string):Promise<app.Reply>;
+
+export function ChatCommand(arg1:string,arg2:string):Promise<app.Reply>;
+
+export function ChatCompact(arg1:string,arg2:string):Promise<app.Reply>;
+
+export function ChatControl(arg1:string,arg2:string,arg3:string):Promise<app.Reply>;
+
+export function ChatState(arg1:string):Promise<app.Reply>;
+
+export function ChatSteerSubagent(arg1:string,arg2:string,arg3:string):Promise<void>;
+
 export function ChatSubmissionState():Promise<app.SubmissionSnapshot>;
+
+export function ChatSubmissions(arg1:string):Promise<any>;
+
+export function Chats():Promise<Array<any>>;
+
+export function CloseChat(arg1:string):Promise<void>;
 
 export function Command(arg1:string):Promise<app.Reply>;
 
@@ -34,6 +54,8 @@ export function CompactConversation(arg1:string):Promise<app.Reply>;
 export function CompletePath(arg1:string,arg2:string):Promise<Array<main.PathSuggestion>>;
 
 export function ContextWindow(arg1:string,arg2:string):Promise<any>;
+
+export function ContinueChat(arg1:string):Promise<any>;
 
 export function CopyPaths(arg1:any):Promise<main.FileBrowser>;
 
@@ -85,6 +107,8 @@ export function ModelCatalog(arg1:boolean):Promise<Array<app.ModelGroup>>;
 
 export function Models():Promise<Array<app.ModelGroup>>;
 
+export function OpenChat(arg1:string):Promise<any>;
+
 export function OpenCodexLogin():Promise<main.AccountState>;
 
 export function OpenExternal(arg1:string):Promise<void>;
@@ -115,9 +139,13 @@ export function ReadSkill(arg1:string):Promise<main.FilePreview>;
 
 export function RecordVisualEvents(arg1:string,arg2:Array<Record<string, any>>):Promise<void>;
 
+export function RemoveChatQueued(arg1:string,arg2:string):Promise<any>;
+
 export function RemoveQueuedChat(arg1:string):Promise<app.SubmissionSnapshot>;
 
 export function RemoveSecret(arg1:string):Promise<void>;
+
+export function RenameChat(arg1:string,arg2:string):Promise<void>;
 
 export function RenamePath(arg1:main.FileRenameRequest):Promise<main.FileBrowser>;
 

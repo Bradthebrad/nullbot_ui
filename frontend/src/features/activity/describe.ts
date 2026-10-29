@@ -131,6 +131,17 @@ const registry: Record<string, Describer> = {
   // NullBot built-ins
   visualize: a => ({verb: v('Showing you', 'Showed you', 'Couldn’t show you'), object: quoted(pick(a, 'title'), 48) || 'a visual', category: 'image'}),
   visualize_results: () => ({verb: v('Reading', 'Read', 'Couldn’t read'), object: 'your responses to visuals', category: 'nullbot'}),
+  secret_run: a => {
+    const secrets = Array.isArray(a.secrets) ? (a.secrets as unknown[]).map(String) : [];
+    const program = shorten(String(pick(a, 'command') || 'a command').split(/\s+/)[0], 32);
+    return {verb: v('Running', 'Ran', 'Couldn’t run'), object: `${quoted(program, 32)}${secrets.length ? ` with ${secrets.join(', ')}` : ''}`, category: 'command'};
+  },
+  secrets_list: () => ({verb: v('Listing', 'Listed', 'Couldn’t list'), object: 'saved secrets', category: 'nullbot'}),
+  chats_list: () => ({verb: v('Checking', 'Checked', 'Couldn’t check'), object: 'the other chats', category: 'agent'}),
+  chat_read: a => ({verb: v('Reading', 'Read', 'Couldn’t read'), object: `chat ${pick(a, 'chat')}`.trim(), category: 'agent'}),
+  chat_send: a => ({verb: v(pick(a, 'mode') === 'steer' ? 'Steering' : 'Messaging', pick(a, 'mode') === 'steer' ? 'Steered' : 'Messaged', 'Couldn’t message'), object: `chat ${pick(a, 'chat')}`.trim(), category: 'agent'}),
+  chat_control: a => ({verb: v('Controlling', 'Controlled', 'Couldn’t control'), object: `chat ${pick(a, 'chat')} (${pick(a, 'action') || 'action'})`, category: 'agent'}),
+  chat_open: a => ({verb: v('Opening', 'Opened', 'Couldn’t open'), object: `chat ${quoted(pick(a, 'title'), 32)}`.trim(), category: 'agent'}),
   spawn_subagent: a => ({verb: v('Starting', 'Started', 'Couldn’t start'), object: `subagent ${quoted(pick(a, 'name', 'task_name'), 28) || ''}`.trim(), category: 'agent'}),
   subagent_status: () => ({verb: v('Checking', 'Checked', 'Couldn’t check'), object: 'subagents', category: 'agent'}),
   subagent_wait: () => ({verb: v('Waiting for', 'Waited for', 'Stopped waiting for'), object: 'subagent results', category: 'agent'}),
@@ -275,6 +286,16 @@ export function stepDetail(step: Step): string | undefined {
   if (step.state === 'error') return firstLine(step.error);
   if (step.state === 'running') return undefined;
   if (step.guard?.full_tokens) return `Cut to fit: about ${formatTokens(step.guard.full_tokens)} tokens, too large for the room left`;
+  if (step.tool === 'secret_run') {
+    try {
+      const run = JSON.parse(String(step.result || '{}'));
+      if (run.saved_as) return `Saved the output as secret ${run.saved_as}`;
+      if (run.timed_out) return 'Stopped at its time limit';
+      if (typeof run.exit_code === 'number') return run.exit_code === 0 ? firstLine(run.stdout) || 'Finished' : `Exited with ${run.exit_code}${run.stderr ? `: ${firstLine(run.stderr)}` : ''}`;
+    } catch {
+      /* fall through */
+    }
+  }
   const meta = step.resultMeta || {};
   const items = typeof meta.items === 'number' ? meta.items : undefined;
   const links = Array.isArray(meta.links) ? meta.links.length : 0;

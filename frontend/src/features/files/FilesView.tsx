@@ -10,7 +10,8 @@ import {commonPrefix, dirname, isAbsolutePath, isInside, joinPath, segmentsBelow
 import {guard} from '../../lib/dirty';
 import type {Capability, FileBrowser, FileEntry, FilePreview, FileSearchKind, FileSearchResult, Project} from '../../lib/types';
 import {appStore, openSettings} from '../../state/app';
-import {attachToChat, chatStore, isBusy} from '../../state/chat';
+import {attachToChat, isBusy} from '../../state/chat';
+import {useFocusedChatState} from '../chat/ChatContext';
 import {Blank, Spinner} from '../../ui/layout';
 import {ContextMenu, type MenuItem} from '../../ui/Menu';
 import {Segmented} from '../../ui/Tabs';
@@ -78,7 +79,7 @@ export function FilesView() {
   const projects = useStore(appStore, state => state.projects);
   const request = useStore(appStore, state => state.fileRequest);
   const initial = useStore(appStore, state => state.ui?.files);
-  const busy = useStore(chatStore, isBusy);
+  const busy = useFocusedChatState(isBusy);
   const clipboard = useStore(fileClipboard, state => state);
   const [browser, setBrowser] = useState<FileBrowser | null>(null);
   const [error, setError] = useState('');

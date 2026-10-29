@@ -11,6 +11,8 @@ import (
 // ChatRequest is the captured composer draft. Attachment tokens remain in Text;
 // selected skill contents never enter the visible user message.
 type ChatRequest struct {
+	// Chat is the chat to send to; empty means the main chat.
+	Chat        string   `json:"chat,omitempty"`
 	Mode        string   `json:"mode"`
 	Text        string   `json:"text"`
 	SkillPaths  []string `json:"skill_paths,omitempty"`
@@ -22,8 +24,9 @@ func (a *App) SubmitChatRequest(request ChatRequest) (nullbot.Reply, error) {
 	if a.initErr != nil {
 		return nullbot.Reply{}, a.initErr
 	}
-	if a.bot == nil {
-		return nullbot.Reply{}, fmt.Errorf("chat service is not initialized")
+	bot, err := a.chat(request.Chat)
+	if err != nil {
+		return nullbot.Reply{}, err
 	}
 	request.Text = strings.TrimSpace(request.Text)
 	if request.Text == "" {
@@ -37,22 +40,22 @@ func (a *App) SubmitChatRequest(request ChatRequest) (nullbot.Reply, error) {
 		return nullbot.Reply{}, fmt.Errorf("unknown submission mode %q", request.Mode)
 	}
 	// A leading /skill-name selects that skill for the rest of the message.
-	if rest, path, ok := nullbot.SkillInvocation(a.bot.Config(), request.Text); ok {
+	if rest, path, ok := nullbot.SkillInvocation(bot.Config(), request.Text); ok {
 		if rest == "" {
 			return nullbot.Reply{}, fmt.Errorf("add a message for the skill to work on")
 		}
 		request.Text = rest
 		request.SkillPaths = append(append([]string(nil), request.SkillPaths...), path)
 	}
-	ctx, err := nullbot.WithSelectedSkills(context.Background(), a.bot.Config(), request.SkillPaths)
+	ctx, err := nullbot.WithSelectedSkills(context.Background(), bot.Config(), request.SkillPaths)
 	if err != nil {
 		return nullbot.Reply{}, err
 	}
 	if mode == "send" && strings.HasPrefix(request.Text, "/") {
-		return a.submit(request.Text)
+		return a.submitIn(request.Chat, request.Text)
 	}
-	receipt := a.bot.SubmitRoutedRequest(ctx, request.Text, mode, request.RequestID, request.TargetJobID)
-	reply := a.bot.State()
+	receipt := bot.SubmitRoutedRequest(ctx, request.Text, mode, request.RequestID, request.TargetJobID)
+	reply := tagged(bot.State(), request.Chat)
 	reply.Activity = nil
 	reply.Command = request.Text
 	if reply.Data == nil {
@@ -101,16 +104,20 @@ func (a *App) ChatSubmissionState() nullbot.SubmissionSnapshot {
 
 // publishSubmissionCompletion publishes current primary history, not the older
 // history snapshot captured by an independently finishing Also job.
-func (a *App) publishSubmissionCompletion(record nullbot.ActivityRecord) {
+func (a *App) publishSubmissionCompletion(chat string, record nullbot.ActivityRecord) {
 	if record.Kind != "submission" || !(record.Status == "submission done" || record.Status == "submission error" || record.Status == "submission canceled") {
 		return
 	}
-	snapshot := a.bot.SubmissionState()
+	bot, err := a.chat(chat)
+	if err != nil {
+		return
+	}
+	snapshot := bot.SubmissionState()
 	for _, job := range snapshot.Jobs {
 		if job.ID != record.SubmissionID || job.Reply == nil {
 			continue
 		}
-		reply := a.bot.State()
+		reply := bot.State()
 		reply.Message = job.Reply.Message
 		reply.Command = job.Reply.Command
 		reply.OpenPanel = job.Reply.OpenPanel
@@ -126,6 +133,7 @@ func (a *App) publishSubmissionCompletion(record nullbot.ActivityRecord) {
 		data["mode"] = job.Mode
 		data["request_id"] = firstNonEmpty(job.RequestID, job.ID)
 		data["submission_status"] = job.Status
+		data["chat"] = chatID(chat)
 		reply.Data = data
 		reply.Activity = nil
 		a.emit("reply", reply)

@@ -1,5 +1,24 @@
 # Unreleased
 
+## Chats
+
+- **Several chats at once**, each with its own conversation, queue, run
+  controls and subagents, in tabs and in side-by-side or stacked groups.
+  Drag a tab to another group or to a group's edge to split; drag the border
+  between groups to resize. The layout is remembered.
+- **The main chat steers the others**: it lists every chat and its
+  subagents, reads one, sends or queues a request, steers a running request
+  or a subagent, pauses or stops a chat, and opens new chats for parallel
+  work.
+- **Activity panel > Chats** shows every chat's state, request and subagents
+  with Pause and Stop. The top bar, palette and activity panel follow the
+  focused chat; a chip says when other chats are working.
+- **History > Continue** opens the saved conversation in a chat of its own
+  instead of replacing the one on screen. Open chats come back after a
+  restart.
+- Activity > Runs lists every chat's subagents, labelled with their chat.
+- Keys: `Ctrl+T`, `Ctrl+\`, `Ctrl+Tab`, `Ctrl+W`.
+
 ## Secrets
 
 - **Settings > Secrets**: the encrypted vault's state (how it is protected,

@@ -20,7 +20,7 @@ export type AppState = {
   mcp: MCPServerStatus[];
   models: ModelGroup[];
   inspectorOpen: boolean;
-  inspectorTab: 'activity' | 'side';
+  inspectorTab: 'activity' | 'side' | 'chats';
   paletteOpen: boolean;
   fileRequest: {path: string; nonce: number} | null;
   /** A visual to select in the Visuals view. */

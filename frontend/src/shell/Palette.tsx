@@ -3,7 +3,10 @@ import {Search} from 'lucide-react';
 import {useStore} from '../lib/store';
 import {api} from '../lib/bindings';
 import {appStore, applyAppearance, applyUIState, openSettings, setView, toggleInspector, type SettingsSection} from '../state/app';
-import {analyzeWorkspace, chatStore, clearConversation, compactConversation, createPlan, pauseRuns, resumeRuns, runPhase, stopEverything, stopRun} from '../state/chat';
+import {analyzeWorkspace, clearConversation, compactConversation, createPlan, pauseRuns, resumeRuns, runPhase, stopEverything, stopRun} from '../state/chat';
+import {useFocusedChatState} from '../features/chat/ChatContext';
+import {MAIN_CHAT, chatsStore, focusedChat, groupOfChat, showChat} from '../state/chats';
+import {closeChat, newChat, renameChat} from '../features/chat/ChatView';
 import {openVisual, visualStore} from '../state/visuals';
 import {confirmDialog, promptDialog} from '../ui/dialogs';
 import {toast, toastError} from '../ui/toast';
@@ -13,8 +16,10 @@ type Command = {id: string; title: string; group: string; keywords?: string; hin
 function useCommands(): Command[] {
   const projects = useStore(appStore, state => state.projects);
   const mcp = useStore(appStore, state => state.mcp);
-  const phase = useStore(chatStore, runPhase);
-  const queued = useStore(chatStore, state => state.submissions.queue?.length || 0);
+  const phase = useFocusedChatState(runPhase);
+  const queued = useFocusedChatState(state => state.submissions.queue?.length || 0);
+  const chats = useStore(chatsStore, state => state.list);
+  const focused = useStore(chatsStore, state => focusedChat(state));
   const waiting = useStore(visualStore, state => state.live.find(v => v.waiting));
   const config = useStore(appStore, state => state.config);
   return useMemo(() => {
@@ -35,8 +40,26 @@ function useCommands(): Command[] {
       {id: 'go-appearance', group: 'Settings', title: 'Appearance and bot name', keywords: 'theme dark light color', run: section('appearance')},
       {id: 'go-usage', group: 'Settings', title: 'Usage and cost', keywords: 'tokens', run: section('usage')},
       {id: 'go-secrets', group: 'Settings', title: 'Secrets and GitHub', keywords: 'vault token ssh key password credentials aws gcp', run: section('secrets')},
-      {id: 'new', group: 'Conversation', title: 'New conversation', keywords: 'clear reset', run: async () => {
-        if (await confirmDialog({title: 'Start a new conversation?', body: 'The visible conversation is cleared. Saved sessions are kept.', confirmLabel: 'Start new'})) await clearConversation();
+      {id: 'chat-new', group: 'Chats', title: 'New chat', hint: 'Ctrl+T', keywords: 'tab session parallel', run: async () => {
+        setView('chat');
+        const group = groupOfChat(chatsStore.get().layout, focusedChat())?.id;
+        await newChat(group);
+      }},
+      {id: 'chat-split', group: 'Chats', title: 'New chat to the right', hint: 'Ctrl+\\', keywords: 'split side by side', run: async () => {
+        setView('chat');
+        const group = groupOfChat(chatsStore.get().layout, focusedChat())?.id;
+        await newChat(group, 'row');
+      }},
+      ...(focused !== MAIN_CHAT ? [
+        {id: 'chat-rename', group: 'Chats', title: 'Rename this chat', run: () => renameChat(focused)},
+        {id: 'chat-close', group: 'Chats', title: 'Close this chat', keywords: 'end stop', run: () => closeChat(focused)},
+      ] : []),
+      ...chats.filter(c => c.id !== focused).map(c => ({id: `chat-go-${c.id}`, group: 'Chats', title: `Go to ${c.title}`, keywords: `chat ${c.request || ''}`, run: () => {
+        showChat(c.id);
+        setView('chat');
+      }})),
+      {id: 'new', group: 'Conversation', title: 'Clear this conversation', keywords: 'new clear reset', run: async () => {
+        if (await confirmDialog({title: 'Clear this conversation?', body: 'The conversation on screen is cleared and the chat starts fresh. What was said stays in History.', confirmLabel: 'Clear'})) await clearConversation();
       }},
       {id: 'compact', group: 'Conversation', title: 'Compact the conversation', keywords: 'summarize context', run: async () => {
         const focus = await promptDialog({title: 'Compact the conversation', label: 'Focus (optional)', placeholder: 'What to keep in detail', confirmLabel: 'Compact', optional: true, body: 'The model summarizes the conversation so far. New requests start from the summary; the messages stay in the chat and in history.'});
@@ -104,7 +127,7 @@ function useCommands(): Command[] {
       }});
     }
     return list;
-  }, [projects, mcp, phase, queued, config, waiting]);
+  }, [projects, mcp, phase, queued, config, waiting, chats, focused]);
 }
 
 function score(command: Command, query: string): number {

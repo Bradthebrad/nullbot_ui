@@ -14,6 +14,7 @@ import {Markdown} from '../../ui/Markdown';
 import {confirmDialog, promptDialog} from '../../ui/dialogs';
 import {toast, toastError} from '../../ui/toast';
 import {steerSubagent} from '../../state/chat';
+import {MAIN_CHAT, chatsStore, showChat} from '../../state/chats';
 
 export function ActivityView() {
   const tab = useStore(appStore, state => state.activityTab);
@@ -39,6 +40,8 @@ export function ActivityView() {
 // -------------------------------------------------------------------- runs
 
 const isLive = (task: AgentTask) => task.status === 'running' || task.status === 'canceling';
+/** Tasks are numbered per chat, so a task is named by its chat too. */
+const taskKey = (task: AgentTask) => `${task.chat || MAIN_CHAT}:${task.id}`;
 
 function RunsTab() {
   const initial = useStore(appStore, state => state.ui?.tasks);
@@ -48,16 +51,18 @@ function RunsTab() {
   const live = tasks.filter(isLive);
   const recent = tasks.filter(task => !isLive(task));
   const now = useNow(live.length > 0);
-  const current = tasks.find(task => task.id === selected) || live[0] || recent[0];
+  const current = tasks.find(task => taskKey(task) === selected) || live[0] || recent[0];
+  const chats = useStore(chatsStore, state => state.list);
+  const chatTitle = (task: AgentTask) => (chats.length > 1 ? chats.find(c => c.id === (task.chat || MAIN_CHAT))?.title : '');
 
   const row = (task: AgentTask) => (
     <ListRow
-      key={task.id}
-      selected={task.id === current?.id}
-      onSelect={() => setSelected(task.id)}
+      key={taskKey(task)}
+      selected={current ? taskKey(task) === taskKey(current) : false}
+      onSelect={() => setSelected(taskKey(task))}
       tone={statusTone(task.status)}
       title={task.name || humanizeName(task.role) || task.id}
-      subtitle={isLive(task) ? task.current || 'Working' : task.error ? firstLine(task.error, 80) : firstLine(task.result || task.prompt, 80)}
+      subtitle={[chatTitle(task), isLive(task) ? task.current || 'Working' : task.error ? firstLine(task.error, 80) : firstLine(task.result || task.prompt, 80)].filter(Boolean).join(': ')}
       meta={isLive(task) ? formatDuration(elapsedSince(task.started_at, now)) : relativeTime(firstTime(task.finished_at, task.updated_at), now)}
     />
   );
@@ -79,13 +84,13 @@ function RunsTab() {
 }
 
 /** Guidance for one subagent; Steer in the chat reaches all of them. */
-function SteerSubagent({taskID, name}: {taskID: string; name: string}) {
+function SteerSubagent({taskID, name, chat}: {taskID: string; name: string; chat?: string}) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   async function send() {
     if (!text.trim()) return;
     setSending(true);
-    if (await steerSubagent(taskID, text.trim())) setText('');
+    if (await steerSubagent(taskID, text.trim(), chat || MAIN_CHAT)) setText('');
     setSending(false);
   }
   return (
@@ -124,6 +129,7 @@ function RunDetail({task, now, onTasks}: {task: AgentTask; now: number; onTasks:
             {task.submission_id && (
               <button className="btn" onClick={() => {
                 appStore.set({inspectorOpen: true, inspectorTab: 'activity'});
+                showChat(task.chat || MAIN_CHAT);
                 setView('chat');
               }}>Show steps in chat</button>
             )}
@@ -131,7 +137,7 @@ function RunDetail({task, now, onTasks}: {task: AgentTask; now: number; onTasks:
               <button className="btn btn-danger" disabled={stopping} onClick={async () => {
                 setStopping(true);
                 try {
-                  onTasks(await api.cancelTask(task.id));
+                  onTasks(await api.cancelChatTask(task.chat || MAIN_CHAT, task.id));
                   toast('Stopping the run.');
                 } catch (error) {
                   toastError(error);
@@ -147,7 +153,7 @@ function RunDetail({task, now, onTasks}: {task: AgentTask; now: number; onTasks:
         {live && task.current && (
           <p className="working-line"><span className="dot live" />{task.current}</p>
         )}
-        {live && task.role === 'subagent' && <SteerSubagent taskID={task.id} name={task.name || 'this subagent'} />}
+        {live && task.role === 'subagent' && <SteerSubagent taskID={task.id} chat={task.chat} name={task.name || 'this subagent'} />}
         {task.error && <div className="notice bad"><div><strong>The run failed.</strong> {task.error}</div></div>}
         {task.prompt && (
           <Section title="Asked to">

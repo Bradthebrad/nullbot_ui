@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"sync"
 	"time"
 
@@ -27,7 +28,7 @@ func newActivityBatcher(emit func([]nullbot.ActivityRecord)) *activityBatcher {
 }
 
 func sameStream(a, b nullbot.ActivityRecord) bool {
-	return a.Status == b.Status && a.Kind == b.Kind && a.SubmissionID == b.SubmissionID && a.AgentID == b.AgentID && a.RunID == b.RunID && a.Lane == b.Lane && a.TaskID == b.TaskID && a.ParentRunID == b.ParentRunID
+	return a.Chat == b.Chat && a.Status == b.Status && a.Kind == b.Kind && a.SubmissionID == b.SubmissionID && a.AgentID == b.AgentID && a.RunID == b.RunID && a.Lane == b.Lane && a.TaskID == b.TaskID && a.ParentRunID == b.ParentRunID
 }
 
 func (b *activityBatcher) add(record nullbot.ActivityRecord) {
@@ -107,15 +108,45 @@ func (d *changeDebouncer) stop() {
 
 // publishChange emits the snapshot the UI needs for a topic. Small snapshots
 // are pushed directly; large ones are announced and fetched on demand.
-func (a *App) publishChange(topic string) {
+func (a *App) publishChange(key string) {
+	chat, topic := splitChangeKey(key)
 	switch topic {
 	case nullbot.ChangeSubmissions:
-		a.emit("submissions", a.bot.SubmissionState())
+		if bot, err := a.chat(chat); err == nil {
+			a.emit("submissions", chatSubmissions{SubmissionSnapshot: bot.SubmissionState(), Chat: chatID(chat)})
+		}
 	case nullbot.ChangeMCP:
 		a.emit("mcp", a.bot.MCPStatus(false))
 	case nullbot.ChangeVisuals:
-		a.emit("visuals", a.bot.LiveVisualizations())
+		a.emit("visuals", a.liveVisuals())
+	case nullbot.ChangeChats:
+		if a.hub != nil {
+			a.emit("chats", a.hub.Chats())
+		}
 	default:
-		a.emit("changed", map[string]string{"topic": topic})
+		a.emit("changed", map[string]string{"topic": topic, "chat": chatID(chat)})
 	}
+}
+
+// chatSubmissions is a chat's queue and run state, named.
+type chatSubmissions struct {
+	nullbot.SubmissionSnapshot
+	Chat string `json:"chat"`
+}
+
+// changeKey debounces per chat for chat state, and once for shared state.
+func changeKey(chat, topic string) string {
+	switch topic {
+	case nullbot.ChangeSubmissions, nullbot.ChangeHistory:
+		return chatID(chat) + "|" + topic
+	}
+	return "|" + topic
+}
+
+func splitChangeKey(key string) (string, string) {
+	chat, topic, ok := strings.Cut(key, "|")
+	if !ok {
+		return nullbot.MainChat, key
+	}
+	return chat, topic
 }

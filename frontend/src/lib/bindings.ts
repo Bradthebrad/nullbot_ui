@@ -4,7 +4,7 @@ import * as Go from '../../wailsjs/go/main/App';
 import type {
   AgentTask, FileBrowser, FileSearchKind, FileSearchResult, HistoryEntry, HistoryQuery, HistorySearchResult, FilePreview, MCPServerStatus, MarketState, ModelGroup, Plan, ProjectsState, Project,
   Reply, ScheduledTask, SessionSummary, SkillFile, SubmissionSnapshot, UIState, UsageReport, Visualization, VisualDelivery, VisualEvent, VisualView,
-  VaultInfo, SecretInfo, SecretKind, SecretInput, GitHubIdentity,
+  VaultInfo, SecretInfo, SecretKind, SecretInput, GitHubIdentity, ChatInfo,
 } from './types';
 
 const go = Go as unknown as Record<string, (...args: any[]) => Promise<any>>;
@@ -125,6 +125,21 @@ export const api = {
   generateSSHKey: (name: string, host: string, description: string, agentUse: boolean) => call<SecretInfo>('GenerateSSHKey', name, host, description, agentUse),
   verifyGitHubToken: (name: string) => call<GitHubIdentity>('VerifyGitHubToken', name),
   addSSHKeyToGitHub: (sshName: string, tokenName: string) => call<void>('AddSSHKeyToGitHub', sshName, tokenName),
+
+  chats: () => call<ChatInfo[]>('Chats'),
+  openChat: (title = '') => call<ChatInfo>('OpenChat', title),
+  continueChat: (historyID: string) => call<ChatInfo>('ContinueChat', historyID),
+  closeChat: (id: string) => call<void>('CloseChat', id),
+  renameChat: (id: string, title: string) => call<void>('RenameChat', id, title),
+  chatState: (chat: string) => call<Reply>('ChatState', chat),
+  chatSubmissions: (chat: string) => call<SubmissionSnapshot>('ChatSubmissions', chat),
+  chatControl: (chat: string, action: 'pause' | 'resume' | 'stop' | 'stop_everything', target = '') => call<Reply>('ChatControl', chat, action, target),
+  chatCommand: (chat: string, input: string) => call<Reply>('ChatCommand', chat, input),
+  chatSteerSubagent: (chat: string, taskID: string, text: string) => call<void>('ChatSteerSubagent', chat, taskID, text),
+  cancelChatTask: (chat: string, id: string) => call<AgentTask[]>('CancelChatTask', chat, id),
+  chatCompact: (chat: string, focus: string) => call<Reply>('ChatCompact', chat, focus),
+  chatAnalyze: (chat: string, focus: string) => call<Reply>('ChatAnalyze', chat, focus),
+  removeChatQueued: (chat: string, id: string) => call<SubmissionSnapshot>('RemoveChatQueued', chat, id),
 };
 
 export type Api = typeof api;

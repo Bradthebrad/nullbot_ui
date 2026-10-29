@@ -1,8 +1,8 @@
 // How full the manager's last request was, against the model's window, with
 // the two compaction thresholds marked. Hidden until a request has run.
-import {useStore} from '../../lib/store';
 import {formatTokens} from '../../lib/format';
-import {chatStore, compactConversation, isBusy} from '../../state/chat';
+import {isBusy} from '../../state/chat';
+import {useChat, useChatState} from './ChatContext';
 import {openSettings} from '../../state/app';
 import {MenuButton} from '../../ui/Menu';
 import type {Turn} from '../activity/model';
@@ -15,8 +15,9 @@ export function latestContext(turns: Turn[]): Turn['context'] {
 }
 
 export function ContextMeter() {
-  const context = useStore(chatStore, state => latestContext(state.activity.turns));
-  const busy = useStore(chatStore, isBusy);
+  const chat = useChat();
+  const context = useChatState(state => latestContext(state.activity.turns));
+  const busy = useChatState(isBusy);
   if (!context || !context.window) return null;
   const ratio = Math.min(1, context.tokens / context.window);
   const percent = Math.round(ratio * 100);
@@ -48,7 +49,7 @@ export function ContextMeter() {
         {kind: 'heading', label: summary},
         ...(thresholds ? [{kind: 'heading' as const, label: thresholds}] : []),
         {kind: 'separator'},
-        {label: busy ? 'Compacting waits for this request to finish' : 'Compact the conversation', disabled: busy, onSelect: () => void compactConversation('')},
+        {label: busy ? 'Compacting waits for this request to finish' : 'Compact the conversation', disabled: busy, onSelect: () => void chat.compact('')},
         {label: 'Context settings', onSelect: () => openSettings('agent')},
       ]}
     />

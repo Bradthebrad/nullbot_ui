@@ -47,23 +47,24 @@ describe('run controls', () => {
     await boot(running());
     const runstate = () => document.querySelector('.runstate')?.textContent || '';
     expect(runstate()).toContain('Working');
-    bridge.set('Pause', () => ({data: {submissions: running({run_paused: true, paused: true})}}));
+    // Controls act on the focused chat, here the main chat.
+    const controlled = (action: string) => bridge.callsTo('ChatControl').filter(args => args[1] === action);
+    bridge.set('ChatControl', (_chat: string, action: string) => ({data: {submissions:
+      action === 'pause' ? running({run_paused: true, paused: true}) : action === 'stop' ? running({stopping: true}) : running()}}));
     fireEvent.click(screen.getByRole('button', {name: 'Pause'}));
     await waitFor(() => expect(runstate()).toContain('Paused'));
-    bridge.set('Resume', () => ({data: {submissions: running()}}));
     fireEvent.click(screen.getAllByRole('button', {name: 'Resume'})[0]);
-    await waitFor(() => expect(bridge.callsTo('Resume')).toHaveLength(1));
+    await waitFor(() => expect(controlled('resume')).toHaveLength(1));
     await waitFor(() => expect(runstate()).toContain('Working'));
 
-    bridge.set('StopRun', () => ({data: {submissions: running({stopping: true})}}));
     fireEvent.click(screen.getAllByRole('button', {name: 'Stop'})[0]);
     await waitFor(() => expect(runstate()).toContain('Stopping'));
     // Stop names the request on screen, so a newer one is never stopped by mistake.
-    expect(bridge.callsTo('StopRun')).toEqual([['s1']]);
+    expect(controlled('stop')).toEqual([['main', 'stop', 's1']]);
 
     fireEvent.click(screen.getByRole('button', {name: 'More ways to stop'}));
     fireEvent.click(screen.getByRole('menuitem', {name: /Stop everything now/}));
-    await waitFor(() => expect(bridge.callsTo('StopEverything')).toHaveLength(1));
+    await waitFor(() => expect(controlled('stop_everything')).toHaveLength(1));
   });
 
   it('offers Resume when a pause outlives the run', async () => {
@@ -71,7 +72,7 @@ describe('run controls', () => {
     expect(document.querySelector('.runstate')?.textContent).toContain('Paused');
     fireEvent.click(screen.getByRole('button', {name: 'Resume'}));
     await act(async () => undefined);
-    expect(bridge.callsTo('Resume')).toHaveLength(1);
+    expect(bridge.callsTo('ChatControl')).toEqual([['main', 'resume', '']]);
   });
 
   it('offers Resume when queued requests are held', async () => {
@@ -79,6 +80,6 @@ describe('run controls', () => {
     expect(screen.getByText('1 request waiting')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', {name: 'Resume'}));
     await act(async () => undefined);
-    expect(bridge.callsTo('Resume')).toHaveLength(1);
+    expect(bridge.callsTo('ChatControl')).toEqual([['main', 'resume', '']]);
   });
 });

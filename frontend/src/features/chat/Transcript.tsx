@@ -5,7 +5,7 @@ import {kindNames, openVisual, visualStore} from '../../state/visuals';
 import {VisualIcon} from '../visuals/visualIcons';
 import {statusLabel} from '../visuals/VisualsView';
 import {useStore} from '../../lib/store';
-import {chatStore} from '../../state/chat';
+import {useChatState} from './ChatContext';
 import {appStore, openSettings, setView} from '../../state/app';
 import {Markdown} from '../../ui/Markdown';
 import AttachmentTray from '../../AttachmentTray';
@@ -32,7 +32,7 @@ export function rowKeys(messages: ChatMessage[]): string[] {
 }
 
 export function Transcript() {
-  const messages = useStore(chatStore, state => state.messages);
+  const messages = useChatState(state => state.messages);
   const botName = useStore(appStore, state => state.runtime.bot_name || 'NullBot');
   const ref = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
@@ -146,7 +146,7 @@ const MessageRow = memo(function MessageRow({message, rowKey, botName, disclosur
 });
 
 function WorkingLine() {
-  const step = useStore(chatStore, state => {
+  const step = useChatState(state => {
     const turns = state.activity.turns;
     for (let i = turns.length - 1; i >= 0; i--) {
       if (turns[i].state === 'running' && turns[i].lane !== 'also') {
@@ -189,7 +189,7 @@ function TurnVisuals({submissionId}: {submissionId: string}) {
 }
 
 function TurnTools({submissionId}: {submissionId: string}) {
-  const turn = useStore(chatStore, state => state.activity.turns.find(t => t.id === submissionId)) as Turn | undefined;
+  const turn = useChatState(state => state.activity.turns.find(t => t.id === submissionId)) as Turn | undefined;
   const [open, setOpen] = useState(false);
   if (!turn) return null;
   const tools = turn.steps.filter(step => step.kind === 'tool');

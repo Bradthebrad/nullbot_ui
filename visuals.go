@@ -52,7 +52,7 @@ func (a *App) LiveVisualizations() []nullbot.Visualization {
 	if a.bot == nil {
 		return nil
 	}
-	return a.bot.LiveVisualizations()
+	return a.liveVisuals()
 }
 
 // Visualizations lists saved visuals, newest first; projectID limits them
@@ -272,7 +272,7 @@ func (a *App) RecordVisualEvents(id string, events []map[string]any) error {
 	if len(events) > 1000 {
 		events = events[:1000]
 	}
-	return a.bot.RecordVisualEvents(id, events)
+	return a.visualOwner(id).RecordVisualEvents(id, events)
 }
 
 // VisualEvents reads a visual's latest interactions.
@@ -285,7 +285,7 @@ func (a *App) VisualEvents(id string, limit int) ([]map[string]any, error) {
 
 // RespondVisualization sends the person's response, or skips the visual.
 func (a *App) RespondVisualization(req nullbot.VisualResponse) (nullbot.VisualDelivery, error) {
-	return a.bot.RespondVisualization(req)
+	return a.visualOwner(req.ID).RespondVisualization(req)
 }
 
 // DeleteVisualization removes a saved visual.
@@ -304,4 +304,20 @@ func (a *App) RevealVisualization(id string) error {
 		return err
 	}
 	return revealInFileManager(v.Dir)
+}
+
+// liveVisuals lists every chat's open visuals.
+func (a *App) liveVisuals() []nullbot.Visualization {
+	if a.hub != nil {
+		return a.hub.LiveVisualizations()
+	}
+	return a.bot.LiveVisualizations()
+}
+
+// visualOwner is the chat that showed a visual: its answer goes back there.
+func (a *App) visualOwner(id string) *nullbot.App {
+	if a.hub != nil {
+		return a.hub.VisualOwner(id)
+	}
+	return a.bot
 }

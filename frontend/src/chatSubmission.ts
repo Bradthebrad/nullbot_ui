@@ -2,7 +2,7 @@ import type {StagedAttachment} from './attachments';
 
 export type ChatMode = 'normal' | 'also' | 'queue' | 'steer';
 // Composer-facing request keeps text, attachments and selected skills separate.
-export type ChatRequest = {mode: ChatMode; text: string; attachments: {token: string}[]; skills?: string[]; request_id: string; target_job_id?: string};
+export type ChatRequest = {chat?: string; mode: ChatMode; text: string; attachments: {token: string}[]; skills?: string[]; request_id: string; target_job_id?: string};
 export type SubmissionJob = {id: string; request_id?: string; mode: string; input?: string; status: string; error?: string; reply?: ChatReply};
 export type SubmissionSnapshot = {busy: boolean; primary_id?: string; queue: SubmissionJob[]; jobs: SubmissionJob[]};
 export type ChatReply = {message?: string; command?: string; open_panel?: string; history?: any[]; activity?: any[]; data?: {
@@ -10,20 +10,20 @@ export type ChatReply = {message?: string; command?: string; open_panel?: string
   submission_id?: string; submission_mode?: string; submission_status?: string; submissions?: SubmissionSnapshot;
   submission?: {id: string; mode: string; status: string};
 }};
-type WireRequest = {mode: ChatMode; text: string; skill_paths?: string[]; request_id: string; target_job_id?: string};
+type WireRequest = {chat?: string; mode: ChatMode; text: string; skill_paths?: string[]; request_id: string; target_job_id?: string};
 type ChatBridge = {RemoveQueuedChat: (id: string) => Promise<SubmissionSnapshot>; SubmitChatRequest: (request: WireRequest) => Promise<ChatReply>; ChatSubmissionState: () => Promise<SubmissionSnapshot>};
 function bridge(): ChatBridge {
   return (window as unknown as {go: {main: {App: ChatBridge}}}).go.main.App;
 }
-export function makeChatRequest(mode: ChatMode, text: string, attachments: StagedAttachment[], skills: string[], targetJobID?: string): ChatRequest {
-  return {mode, text, attachments: attachments.map(item => ({token: item.token!})), request_id: crypto.randomUUID(),
+export function makeChatRequest(mode: ChatMode, text: string, attachments: StagedAttachment[], skills: string[], targetJobID?: string, chat?: string): ChatRequest {
+  return {...(chat && chat !== 'main' ? {chat} : {}), mode, text, attachments: attachments.map(item => ({token: item.token!})), request_id: crypto.randomUUID(),
     ...(targetJobID ? {target_job_id: targetJobID} : {}), ...(skills.length ? {skills: [...skills]} : {})};
 }
 // Preserve the existing validated @attachment transport at the bridge boundary.
 // Never submit original paths, preview data or raw skill content from the client.
 export function chatWireRequest(request: ChatRequest): WireRequest {
   const tokens = request.attachments.map(item => item.token).filter(Boolean);
-  return {mode: request.mode, text: [request.text, ...tokens].filter(Boolean).join('\n\n'),
+  return {...(request.chat ? {chat: request.chat} : {}), mode: request.mode, text: [request.text, ...tokens].filter(Boolean).join('\n\n'),
     request_id: request.request_id, ...(request.target_job_id ? {target_job_id: request.target_job_id} : {}),
     ...(request.skills?.length ? {skill_paths: request.skills} : {})};
 }
