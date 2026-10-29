@@ -52,3 +52,14 @@ describe('stepSource and links', () => {
     expect(resultLinks(step({resultMeta: {links: ['https://status.example/1']}, result: 'see https://other.example'}))).toContain('https://status.example/1');
   });
 });
+
+describe('Claude CLI steps', () => {
+  it('reads Claude’s own tools as sentences', () => {
+    expect(describeStep(step({tool: 'Read', state: 'done', args: {file_path: '/work/app/main.go'}})).title).toBe('Read main.go');
+    expect(describeStep(step({tool: 'Bash', state: 'running', args: {command: 'go test ./...', description: 'Run the tests'}})).title).toBe('Run the tests');
+    expect(describeStep(step({tool: 'Bash', state: 'error', args: {command: 'go test ./...', description: 'Run the tests'}})).title).toBe('Couldn’t run the tests');
+    expect(describeStep(step({tool: 'Bash', state: 'done', args: {command: 'ls'}})).title).toBe('Ran ls');
+    expect(describeStep(step({tool: 'Grep', state: 'done', args: {pattern: 'TODO'}})).title).toBe('Searched for “TODO”');
+    expect(describeStep(step({tool: 'Edit', state: 'error', args: {file_path: 'a/b.ts'}})).title).toBe('Couldn’t edit b.ts');
+  });
+});

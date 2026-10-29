@@ -26,12 +26,13 @@ const effortHelp: Record<string, string> = {
   xhigh: 'The most reasoning the provider offers. Slower and costlier.',
 };
 
-export const providerNames: Record<string, string> = {codex: 'ChatGPT subscription (Codex)', openai: 'OpenAI', anthropic: 'Anthropic', openrouter: 'OpenRouter'};
+export const providerNames: Record<string, string> = {codex: 'ChatGPT subscription (Codex)', 'claude-cli': 'Claude subscription (Claude CLI)', openai: 'OpenAI', anthropic: 'Anthropic', openrouter: 'OpenRouter'};
 
 /** Whether NullBot has what it needs to call a provider, from runtime status. */
 export function providerReady(runtime: Record<string, any>, provider?: string): boolean | undefined {
   switch (provider) {
     case 'codex': return !!runtime.codex_auth_set;
+    case 'claude-cli': return !!runtime.claude_cli_found;
     case 'openai': return !!runtime.openai_api_key_set;
     case 'anthropic': return !!runtime.anthropic_api_key_set;
     case 'openrouter': return !!runtime.openrouter_api_key_set;

@@ -6,8 +6,14 @@ github.com/Bradthebrad/nullbot v0.4.1-0.20261029011537-fd58d78e194a h1:/vhYpilrD
 github.com/Bradthebrad/nullbot v0.4.1-0.20261029011537-fd58d78e194a/go.mod h1:xDS+nNVmrua27CE65+cPvOnsbgO+AA/8xdCA+zk7zww=
 github.com/Bradthebrad/nullbot v0.4.1-0.20261029011617-112b4f438d41 h1:We+qFphHC1sFivGswr6BFszRxEnDTwI4YOIOiPTLKbM=
 github.com/Bradthebrad/nullbot v0.4.1-0.20261029011617-112b4f438d41/go.mod h1:xDS+nNVmrua27CE65+cPvOnsbgO+AA/8xdCA+zk7zww=
+github.com/Bradthebrad/nullbot v0.4.1-0.20261029012436-3cef19775352 h1:NxteRS/AbnwJP6kBh/R/HVNP638aS/pYwr8KmdFftiA=
+github.com/Bradthebrad/nullbot v0.4.1-0.20261029012436-3cef19775352/go.mod h1:URTDmGgXX67Il0hEnfUnOwuV3ecNJPKmYXSq28QNCFA=
+github.com/Bradthebrad/nullbot v0.4.1-0.20261029014145-3f5ac098f9f5 h1:j1V4iIzQfbl8eRfWMsoumXJYCfQNSn6yEH5z+lg6hpU=
+github.com/Bradthebrad/nullbot v0.4.1-0.20261029014145-3f5ac098f9f5/go.mod h1:URTDmGgXX67Il0hEnfUnOwuV3ecNJPKmYXSq28QNCFA=
 github.com/Bradthebrad/tinychain v0.2.1-0.20261027175520-38e8d9479dcc h1:LschBhyCdPesZEAmFCcFdN0jzN000u0dYwAHK8upfn0=
 github.com/Bradthebrad/tinychain v0.2.1-0.20261027175520-38e8d9479dcc/go.mod h1:odKTVNpwDBecewebXJyS7Au0/m1LjzRdaS4pfnf+J+g=
+github.com/Bradthebrad/tinychain v0.2.1-0.20261029010927-1d120e11ff4d h1:Of1HAZ1hEZm06kd/yPw6qiC6HSYzaUIIJDz00w2aUB8=
+github.com/Bradthebrad/tinychain v0.2.1-0.20261029010927-1d120e11ff4d/go.mod h1:odKTVNpwDBecewebXJyS7Au0/m1LjzRdaS4pfnf+J+g=
 github.com/bep/debounce v1.2.1 h1:v67fRdBA9UQu2NhLFXrSg0Brw7CexQekrBwDMM8bzeY=
 github.com/bep/debounce v1.2.1/go.mod h1:H8yggRPQKLUhUoqrJC1bO2xNya7vanpDl7xR3ISbCJ0=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=

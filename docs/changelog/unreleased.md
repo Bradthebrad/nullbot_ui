@@ -1,5 +1,16 @@
 # Unreleased
 
+## Claude CLI models
+
+- **Claude subscription models** (CLI default, Opus, Sonnet, Haiku) in the
+  model pickers, through your installed `claude` command. Settings >
+  Accounts shows whether it is installed and signed in.
+- **Claude's own steps in the activity panel**, in plain words ("Read
+  main.go", "Run the tests", "Searched for “TODO”").
+- **What Claude says before using a tool** moves into the step commentary
+  instead of showing twice; this also applies to other models that comment
+  before a tool call.
+
 ## Chats
 
 - **Several chats at once**, each with its own conversation, queue, run

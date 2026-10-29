@@ -27,6 +27,21 @@ describe('ingestChatStream', () => {
   });
 });
 
+describe('commentary from a model that runs its own tools', () => {
+  it('moves streamed text that turned out to be commentary instead of repeating it', () => {
+    const messages = stream([['response delta', 'Let me look.'], ['commentary', 'Let me look.'], ['model start', ''], ['response delta', 'It is a Go package.'], ['agent complete', '']]);
+    expect(messages).toHaveLength(1);
+    expect(messages[0].commentary).toEqual(['Let me look.']);
+    expect(messages[0].content).toBe('It is a Go package.');
+  });
+
+  it('keeps both when the commentary differs from what streamed', () => {
+    const messages = stream([['response delta', 'Answer so far'], ['commentary', 'Something else']]);
+    expect(messages[0].commentary).toEqual(['Something else']);
+    expect(messages[0].content).toBe('Answer so far');
+  });
+});
+
 describe('reconcileChatHistory', () => {
   it('replaces a streamed answer with the durable one exactly once', () => {
     let messages = stream([['response delta', 'x'], ['reasoning delta', 'Summary'], ['agent complete', '']]);
