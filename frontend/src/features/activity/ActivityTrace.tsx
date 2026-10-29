@@ -1,7 +1,7 @@
 import {memo, useCallback, useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {ChevronRight, ExternalLink} from 'lucide-react';
 import {useStore} from '../../lib/store';
-import {chatStore} from '../../state/chat';
+import {useChat, useChatState} from '../chat/ChatContext';
 import {appStore, openSettings} from '../../state/app';
 import {api} from '../../lib/bindings';
 import {capabilityLabel, formatDuration, formatTime, formatTokens, permissionLabel, shorten} from '../../lib/format';
@@ -14,7 +14,8 @@ import {isTranscriptNearBottom} from '../chat/transcript';
 
 /** The inspector's flight-recorder view of what the agent is doing. */
 export function ActivityTrace() {
-  const turns = useStore(chatStore, state => state.activity.turns);
+  const chat = useChat();
+  const turns = useChatState(state => state.activity.turns);
   const scroller = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
   const [expandedTurns, setExpandedTurns] = useState<Record<string, boolean>>({});
@@ -37,7 +38,7 @@ export function ActivityTrace() {
       appStore.set({focusStep: ''});
       return;
     }
-    const turn = chatStore.get().activity.turns.find(t => t.steps.some(s => s.key === focusStep));
+    const turn = chat.store.get().activity.turns.find(t => t.steps.some(s => s.key === focusStep));
     if (!turn || expandedTurns[turn.id] === true) {
       appStore.set({focusStep: ''});
       return;
@@ -71,7 +72,7 @@ function questionFor(messages: any[], turnID: string): string {
 }
 
 const TurnBlock = memo(function TurnBlock({turn, expanded, fallback, onToggle, focusKey}: {turn: Turn; expanded: boolean; fallback: boolean; onToggle: (id: string, fallback: boolean) => void; focusKey: string}) {
-  const question = useStore(chatStore, state => questionFor(state.messages, turn.id));
+  const question = useChatState(state => questionFor(state.messages, turn.id));
   const running = turn.state === 'running';
   const now = useNow(running);
   const elapsed = turn.endedAt ? Date.parse(turn.endedAt) - Date.parse(turn.startedAt || '') : running ? now - Date.parse(turn.startedAt || '') : NaN;

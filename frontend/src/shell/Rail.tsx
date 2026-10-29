@@ -1,7 +1,9 @@
 import {Activity, Blocks, Folder, History, MessageSquare, Settings, Shapes} from 'lucide-react';
 import {useStore} from '../lib/store';
 import {appStore, setView, type View} from '../state/app';
-import {chatStore, isBusy} from '../state/chat';
+import {chatsStore} from '../state/chats';
+import {useFocusedChatState} from '../features/chat/ChatContext';
+import {isBusy} from '../state/chat';
 import {visualStore} from '../state/visuals';
 
 const items: {id: View; label: string; icon: typeof Activity; key: string; title?: string}[] = [
@@ -18,7 +20,9 @@ export const railViews = [...items.map(item => item.id), 'settings' as View];
 export function Rail() {
   const view = useStore(appStore, state => state.view);
   const botName = useStore(appStore, state => String(state.runtime.bot_name || 'NullBot'));
-  const busy = useStore(chatStore, isBusy);
+  const focusedBusy = useFocusedChatState(isBusy);
+  const othersBusy = useStore(chatsStore, state => state.list.some(c => c.status !== 'idle'));
+  const busy = focusedBusy || othersBusy;
   const failing = useStore(appStore, state => state.mcp.some(s => s.enabled && s.state === 'error'));
   const waiting = useStore(visualStore, state => state.live.some(v => v.waiting));
   return (

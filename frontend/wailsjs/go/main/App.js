@@ -38,6 +38,10 @@ export function BuildUsageReport(arg1, arg2) {
   return window['go']['main']['App']['BuildUsageReport'](arg1, arg2);
 }
 
+export function CancelChatTask(arg1, arg2) {
+  return window['go']['main']['App']['CancelChatTask'](arg1, arg2);
+}
+
 export function CancelScheduledTask(arg1) {
   return window['go']['main']['App']['CancelScheduledTask'](arg1);
 }
@@ -46,8 +50,44 @@ export function CancelTask(arg1) {
   return window['go']['main']['App']['CancelTask'](arg1);
 }
 
+export function ChatAnalyze(arg1, arg2) {
+  return window['go']['main']['App']['ChatAnalyze'](arg1, arg2);
+}
+
+export function ChatCommand(arg1, arg2) {
+  return window['go']['main']['App']['ChatCommand'](arg1, arg2);
+}
+
+export function ChatCompact(arg1, arg2) {
+  return window['go']['main']['App']['ChatCompact'](arg1, arg2);
+}
+
+export function ChatControl(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ChatControl'](arg1, arg2, arg3);
+}
+
+export function ChatState(arg1) {
+  return window['go']['main']['App']['ChatState'](arg1);
+}
+
+export function ChatSteerSubagent(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ChatSteerSubagent'](arg1, arg2, arg3);
+}
+
 export function ChatSubmissionState() {
   return window['go']['main']['App']['ChatSubmissionState']();
+}
+
+export function ChatSubmissions(arg1) {
+  return window['go']['main']['App']['ChatSubmissions'](arg1);
+}
+
+export function Chats() {
+  return window['go']['main']['App']['Chats']();
+}
+
+export function CloseChat(arg1) {
+  return window['go']['main']['App']['CloseChat'](arg1);
 }
 
 export function Command(arg1) {
@@ -64,6 +104,10 @@ export function CompletePath(arg1, arg2) {
 
 export function ContextWindow(arg1, arg2) {
   return window['go']['main']['App']['ContextWindow'](arg1, arg2);
+}
+
+export function ContinueChat(arg1) {
+  return window['go']['main']['App']['ContinueChat'](arg1);
 }
 
 export function CopyPaths(arg1) {
@@ -166,6 +210,10 @@ export function Models() {
   return window['go']['main']['App']['Models']();
 }
 
+export function OpenChat(arg1) {
+  return window['go']['main']['App']['OpenChat'](arg1);
+}
+
 export function OpenCodexLogin() {
   return window['go']['main']['App']['OpenCodexLogin']();
 }
@@ -226,12 +274,20 @@ export function RecordVisualEvents(arg1, arg2) {
   return window['go']['main']['App']['RecordVisualEvents'](arg1, arg2);
 }
 
+export function RemoveChatQueued(arg1, arg2) {
+  return window['go']['main']['App']['RemoveChatQueued'](arg1, arg2);
+}
+
 export function RemoveQueuedChat(arg1) {
   return window['go']['main']['App']['RemoveQueuedChat'](arg1);
 }
 
 export function RemoveSecret(arg1) {
   return window['go']['main']['App']['RemoveSecret'](arg1);
+}
+
+export function RenameChat(arg1, arg2) {
+  return window['go']['main']['App']['RenameChat'](arg1, arg2);
 }
 
 export function RenamePath(arg1) {

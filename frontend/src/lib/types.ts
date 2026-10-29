@@ -17,6 +17,8 @@ export type PermissionDecision = {
 
 export type ActivityRecord = {
   seq?: number;
+  /** The chat the record belongs to; absent means the main chat. */
+  chat?: string;
   time?: string;
   kind?: string;
   status?: string;
@@ -140,6 +142,8 @@ export type ModelGroup = {provider: string; models: ModelOption[]; error?: strin
 
 export type AgentTask = {
   id: string;
+  /** The chat the task runs in. */
+  chat?: string;
   name: string;
   role: string;
   prompt?: string;
@@ -212,7 +216,7 @@ export type MarketState = {packages: MarketPackage[]; local_servers?: {id: strin
 
 export type SubmissionJob = {id: string; request_id?: string; mode: string; input?: string; status: string; error?: string; reply?: {message?: string; data?: any}};
 /** paused: queued requests are held. run_paused: running agents wait at their next step. stopping: the running request is wrapping up. */
-export type SubmissionSnapshot = {paused?: boolean; run_paused?: boolean; stopping?: boolean; busy: boolean; primary_id?: string; queue: SubmissionJob[]; jobs: SubmissionJob[]};
+export type SubmissionSnapshot = {chat?: string; paused?: boolean; run_paused?: boolean; stopping?: boolean; busy: boolean; primary_id?: string; queue: SubmissionJob[]; jobs: SubmissionJob[]};
 
 export type Reply = {
   message?: string;
@@ -297,3 +301,12 @@ export type SecretInput = {
   clear_values?: string[]; agent_use: boolean; servers?: string[];
 };
 export type GitHubIdentity = {login: string; name?: string; scopes?: string; host: string};
+
+/** One live chat: a conversation with its own queue, run controls and subagents. */
+export type ChatInfo = {
+  id: string; title: string; main?: boolean;
+  status: 'idle' | 'running' | 'paused' | 'stopping' | 'held';
+  queue: number; request?: string; last_reply?: string; messages: number;
+  subagents?: {id: string; name?: string; role?: string; status: string; current?: string}[];
+  history_id: string; created: string; updated: string;
+};

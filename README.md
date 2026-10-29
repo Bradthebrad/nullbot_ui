@@ -67,6 +67,29 @@ the permission of the project it touches.
   </tr>
 </table>
 
+## Several chats at once
+
+Open as many chats as you need, each with its own conversation, queue, run
+controls and subagents. Put them in tabs, or side by side and one above
+another like editor groups: drag a tab to another group, or to a group's right
+or bottom edge to split it. The top bar, the palette and the activity panel
+follow the chat you are in.
+
+- **The main chat watches the rest.** It can list every chat with what it is
+  working on and its subagents, read a chat, start or queue a request in one,
+  steer its running request or one of its subagents, pause or stop it, and
+  open new chats to run work in parallel. Ask it "what are the other chats
+  doing?" or "have the backup chat also check the replicas".
+- **Chats at a glance.** The activity panel's Chats tab shows every chat's
+  state, request and subagents, with Pause and Stop.
+- **Nothing is replaced.** Continuing a saved conversation from History opens
+  it in a chat of its own. Chats that were open come back when the app
+  restarts, each continuing its own history.
+- **Keys.** `Ctrl+T` opens a chat, `Ctrl+\` opens one to the right,
+  `Ctrl+Tab` moves between tabs, `Ctrl+W` closes a chat.
+
+<img alt="Two chats side by side: the main chat answering about incidents, and a release-notes chat running a GitHub command with a subagent, with every chat's state in the activity panel" src="docs/images/chats.png">
+
 ## Interactive visuals
 
 When a choice, a label or a test is easier to point at than to describe, the

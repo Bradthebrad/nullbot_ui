@@ -1,10 +1,12 @@
 import {useEffect} from 'react';
 import {useStore} from './lib/store';
 import {api} from './lib/bindings';
-import {onActivity, onChanged, onMCP, onReply, onStatus, onSubmissions, onVisuals} from './lib/events';
+import {onActivity, onChanged, onChats, onMCP, onReply, onStatus, onSubmissions, onVisuals} from './lib/events';
 import {installLinkInterceptor} from './lib/links';
 import {appStore, applyUIState, bumpVersion, openFile, refreshState, setView, toggleInspector} from './state/app';
 import {bootstrapChat, handleReply, handleSubmissions, queueActivity} from './state/chat';
+import {MAIN_CHAT, chatsStore, cycleTab, focusedChat, groupOfChat, setChats} from './state/chats';
+import {closeChat, newChat} from './features/chat/ChatView';
 import {Rail, railViews} from './shell/Rail';
 import {TopBar} from './shell/TopBar';
 import {Palette} from './shell/Palette';
@@ -36,6 +38,7 @@ export default function App() {
         applyUIState(ui);
         bootstrapChat(ui.reply);
         appStore.set({ready: true});
+        api.chats().then(list => setChats(list || [])).catch(() => setChats([]));
         void bootstrapVisuals();
         if (!ui.models_fresh) api.modelCatalog(false).then(models => appStore.set({models})).catch(() => undefined);
       })
@@ -47,6 +50,7 @@ export default function App() {
       onActivity(queueActivity),
       onReply(handleReply),
       onSubmissions(handleSubmissions),
+      onChats(list => setChats(list || [])),
       onVisuals(list => {
         handleLiveVisuals(list);
         bumpVersion('visuals');
@@ -88,6 +92,20 @@ export default function App() {
       } else if (/^[1-6]$/.test(key)) {
         event.preventDefault();
         setView(railViews[Number(key) - 1]);
+      } else if (key === 't' && !event.shiftKey) {
+        event.preventDefault();
+        setView('chat');
+        void newChat(groupOfChat(chatsStore.get().layout, focusedChat())?.id);
+      } else if (key === '\\') {
+        event.preventDefault();
+        setView('chat');
+        void newChat(groupOfChat(chatsStore.get().layout, focusedChat())?.id, 'row');
+      } else if (key === 'tab' && appStore.get().view === 'chat') {
+        event.preventDefault();
+        cycleTab(event.shiftKey ? -1 : 1);
+      } else if (key === 'w' && appStore.get().view === 'chat' && focusedChat() !== MAIN_CHAT) {
+        event.preventDefault();
+        void closeChat(focusedChat());
       }
     }
     window.addEventListener('keydown', onKey);

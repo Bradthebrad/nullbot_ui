@@ -2,7 +2,9 @@ import {ChevronDown, Folder, PanelRight, Pause, Play, Search, Square} from 'luci
 import {useStore, shallowEqual} from '../lib/store';
 import {api} from '../lib/bindings';
 import {appStore, applyUIState, openSettings, setView, toggleInspector, type View} from '../state/app';
-import {chatStore, pauseRuns, resumeRuns, runPhase, stopEverything, stopRun} from '../state/chat';
+import {runPhase} from '../state/chat';
+import {useFocusedChat} from '../features/chat/ChatContext';
+import {chatsStore, focusedChat, showChat} from '../state/chats';
 import {MenuButton, type MenuItem} from '../ui/Menu';
 import {toast, toastError} from '../ui/toast';
 import {formatDuration, permissionLabel, shorten} from '../lib/format';
@@ -137,21 +139,32 @@ function WaitingVisual() {
 }
 
 function RunState() {
-  const phase = useStore(chatStore, runPhase);
-  const waiting = useStore(chatStore, state => state.submissions.queue?.length || 0);
-  const startedAt = useStore(chatStore, state => {
+  const chat = useFocusedChat();
+  const phase = useStore(chat.store, runPhase);
+  const waiting = useStore(chat.store, state => state.submissions.queue?.length || 0);
+  const others = useStore(chatsStore, state => state.list.filter(c => c.id !== focusedChat(state) && c.status !== 'idle').map(c => c.id).join(','));
+  const startedAt = useStore(chat.store, state => {
     const turns = state.activity.turns;
     for (let i = turns.length - 1; i >= 0; i--) if (turns[i].state === 'running' && turns[i].lane !== 'also') return turns[i].startedAt || '';
     return '';
   });
   const now = useNow(phase === 'working' || phase === 'paused' || phase === 'stopping');
-  if (phase === 'idle') return null;
+  const elsewhere = others ? others.split(',') : [];
+  if (phase === 'idle') {
+    if (!elsewhere.length) return null;
+    return (
+      <button className="btn btn-sm runstate-others" title="Show the chat" onClick={() => showChat(elsewhere[0])}>
+        <span className="dot live" aria-hidden="true" />
+        {elsewhere.length === 1 ? 'Another chat is working' : `${elsewhere.length} other chats are working`}
+      </button>
+    );
+  }
   if (phase === 'held') {
     return (
       <div className="runstate">
         <span className="dot idle" />
         <span>{waiting ? `${waiting} request${waiting === 1 ? '' : 's'} waiting` : 'Paused'}</span>
-        <button className="btn btn-sm" onClick={() => void resumeRuns()}><Play size={12} />Resume</button>
+        <button className="btn btn-sm" onClick={() => void chat.resume()}><Play size={12} />Resume</button>
       </div>
     );
   }
@@ -162,18 +175,18 @@ function RunState() {
     <div className="runstate" role="status">
       <span className={`dot ${phase === 'paused' ? 'idle' : 'live'}`} />
       <span title={phase === 'paused' ? 'Anything already under way finishes; nothing new starts until you resume.' : phase === 'stopping' ? 'Finishing the current step, then wrapping up.' : undefined}>{label}{time}</span>
-      {phase === 'working' && <button className="btn btn-sm" title="Let the current step finish, then wait" onClick={() => void pauseRuns()}><Pause size={11} />Pause</button>}
-      {phase === 'paused' && <button className="btn btn-sm" onClick={() => void resumeRuns()}><Play size={11} />Resume</button>}
+      {phase === 'working' && <button className="btn btn-sm" title="Let the current step finish, then wait" onClick={() => void chat.pause()}><Pause size={11} />Pause</button>}
+      {phase === 'paused' && <button className="btn btn-sm" onClick={() => void chat.resume()}><Play size={11} />Resume</button>}
       <div className="split">
-        <button className="btn btn-sm" disabled={phase === 'stopping'} title="Finish the current step, then wrap up with what was done" onClick={() => void stopRun()}><Square size={11} />Stop</button>
+        <button className="btn btn-sm" disabled={phase === 'stopping'} title="Finish the current step, then wrap up with what was done" onClick={() => void chat.stop()}><Square size={11} />Stop</button>
         <MenuButton
           className="btn btn-sm btn-icon"
           label={<ChevronDown size={12} />}
           title="More ways to stop"
           align="end"
           items={[
-            {label: 'Stop after this step', hint: 'Wraps up', disabled: phase === 'stopping', onSelect: () => void stopRun()},
-            {label: 'Stop everything now', hint: 'Cancels tool calls', danger: true, onSelect: () => void stopEverything()},
+            {label: 'Stop after this step', hint: 'Wraps up', disabled: phase === 'stopping', onSelect: () => void chat.stop()},
+            {label: 'Stop everything now', hint: 'Cancels tool calls', danger: true, onSelect: () => void chat.stopEverything()},
           ]}
         />
       </div>

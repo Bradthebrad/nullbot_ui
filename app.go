@@ -29,7 +29,10 @@ const (
 )
 
 type App struct {
-	ctx          context.Context
+	ctx context.Context
+	// hub runs the chats; bot is its main chat, which also owns the shared
+	// configuration, tool servers and schedule.
+	hub          *nullbot.Hub
 	bot          *nullbot.App
 	initErr      error
 	submitMu     sync.Mutex
@@ -302,6 +305,7 @@ func NewApp() *App {
 	}
 	// This app can show visuals, so the agent gets the visualize tools.
 	a.bot.EnableVisuals()
+	a.hub = nullbot.HubFor(a.bot)
 	return a
 }
 
@@ -312,12 +316,17 @@ func (a *App) startup(ctx context.Context) {
 		// Activity reaches the UI as arrays: streamed fragments are merged and
 		// flushed about 30 times a second; everything else flushes at once.
 		a.batcher = newActivityBatcher(func(batch []nullbot.ActivityRecord) { a.emit("activity", batch) })
-		a.activityStop = a.bot.SubscribeActivity(func(record nullbot.ActivityRecord) {
+		a.activityStop = a.hub.SubscribeActivity(func(chat string, record nullbot.ActivityRecord) {
 			a.batcher.add(record)
-			a.publishSubmissionCompletion(record)
+			a.publishSubmissionCompletion(chat, record)
 		})
 		a.changes = newChangeDebouncer(a.publishChange)
-		a.changesStop = a.bot.SubscribeChanges(a.changes.notify)
+		a.changesStop = a.hub.SubscribeChanges(func(chat, topic string) { a.changes.notify(changeKey(chat, topic)) })
+		if a.initErr == nil {
+			// Chats that were open last time come back, each continuing its
+			// own conversation.
+			a.hub.Restore()
+		}
 	}
 	if a.initErr != nil {
 		a.emit("status", map[string]string{"message": a.initErr.Error()})
@@ -337,7 +346,9 @@ func (a *App) shutdown(ctx context.Context) {
 	if a.changes != nil {
 		a.changes.stop()
 	}
-	if a.bot != nil {
+	if a.hub != nil {
+		a.hub.Shutdown()
+	} else if a.bot != nil {
 		a.bot.Shutdown()
 	}
 }
@@ -376,7 +387,7 @@ func (a *App) State() (UIState, error) {
 		Projects:    a.Projects(),
 		Themes:      themeCatalog(),
 		Usage:       a.bot.UsageSummary(),
-		Tasks:       a.bot.TaskSnapshots(),
+		Tasks:       a.allTasks(),
 		Scheduled:   a.bot.ScheduledTasks(),
 		Thoughts:    a.bot.ThoughtSnapshots(),
 		Files:       files,
@@ -389,10 +400,7 @@ func (a *App) Submit(input string) (nullbot.Reply, error) {
 }
 
 func (a *App) Command(input string) (nullbot.Reply, error) {
-	if !strings.HasPrefix(strings.TrimSpace(input), "/") {
-		input = "/" + strings.TrimLeft(input, "/")
-	}
-	return a.submit(input)
+	return a.ChatCommand(nullbot.MainChat, input)
 }
 
 func (a *App) SendAlso(question string) (nullbot.Reply, error) {
@@ -402,14 +410,12 @@ func (a *App) SendAlso(question string) (nullbot.Reply, error) {
 // Pause holds every running agent at its next step and holds the queue.
 // Steps already under way finish first.
 func (a *App) Pause() (nullbot.Reply, error) {
-	a.bot.PauseRuns()
-	return a.runReply("Pausing. Steps already under way finish, then everything waits until you resume.")
+	return a.ChatControl(nullbot.MainChat, "pause", "")
 }
 
 // Resume lets paused agents carry on and starts held requests.
 func (a *App) Resume() (nullbot.Reply, error) {
-	a.bot.ResumeRuns()
-	return a.runReply("Resumed.")
+	return a.ChatControl(nullbot.MainChat, "resume", "")
 }
 
 // StopRun asks the running request to wrap up: no new tool calls, and an
@@ -418,16 +424,12 @@ func (a *App) Resume() (nullbot.Reply, error) {
 // running by the time this arrives, nothing stops. Empty means whichever
 // request is running.
 func (a *App) StopRun(targetID string) (nullbot.Reply, error) {
-	if err := a.bot.StopRequest(targetID); err != nil {
-		return nullbot.Reply{}, err
-	}
-	return a.runReply("Stopping. The current step finishes, then the request wraps up.")
+	return a.ChatControl(nullbot.MainChat, "stop", targetID)
 }
 
 // StopEverything cancels all running work now and holds queued requests.
 func (a *App) StopEverything() (nullbot.Reply, error) {
-	a.bot.StopEverything()
-	return a.runReply("Stopped everything. Queued requests wait until you resume.")
+	return a.ChatControl(nullbot.MainChat, "stop_everything", "")
 }
 
 // SteerSubagent sends guidance to one running subagent.
@@ -435,13 +437,6 @@ func (a *App) SteerSubagent(taskID, text string) error {
 	return a.bot.SteerTask(taskID, text)
 }
 
-func (a *App) runReply(message string) (nullbot.Reply, error) {
-	reply := a.bot.State()
-	reply.Message = message
-	reply.Activity = nil
-	a.emit("reply", reply)
-	return reply, nil
-}
 
 func (a *App) Analyze(focus string) (nullbot.Reply, error) {
 	cmd := "/analyze"
@@ -500,16 +495,7 @@ func (a *App) ContextWindow(provider, model string) nullbot.ContextWindow {
 }
 
 func (a *App) submit(input string) (nullbot.Reply, error) {
-	if a.initErr != nil {
-		return nullbot.Reply{}, a.initErr
-	}
-	a.submitMu.Lock()
-	defer a.submitMu.Unlock()
-	ctx := context.Background()
-	reply := a.bot.Submit(ctx, input)
-	reply.Activity = nil
-	a.emit("reply", reply)
-	return reply, nil
+	return a.submitIn(nullbot.MainChat, input)
 }
 
 func (a *App) startBackgroundSubmit(input, label string) (nullbot.Reply, error) {
@@ -545,36 +531,53 @@ func (a *App) SaveConfig(config nullbot.Config, keys nullbot.APIKeys) (UIState, 
 	}); err != nil {
 		return UIState{}, err
 	}
-	currentKeys := a.bot.APIKeys()
-	if strings.TrimSpace(keys.OpenAI) != "" {
-		currentKeys.OpenAI = keys.OpenAI
-	}
-	if strings.TrimSpace(keys.Anthropic) != "" {
-		currentKeys.Anthropic = keys.Anthropic
-	}
-	if strings.TrimSpace(keys.OpenRouter) != "" {
-		currentKeys.OpenRouter = keys.OpenRouter
-	}
-	if strings.TrimSpace(keys.Google) != "" {
-		currentKeys.Google = keys.Google
-	}
-	if len(keys.Other) > 0 {
-		if currentKeys.Other == nil {
-			currentKeys.Other = map[string]string{}
-		}
-		for provider, key := range keys.Other {
-			provider = strings.ToLower(strings.TrimSpace(provider))
-			if provider == "" || strings.TrimSpace(key) == "" {
-				continue
-			}
-			currentKeys.Other[provider] = strings.TrimSpace(key)
-		}
-	}
-	if err := a.bot.SaveAPIKeys(currentKeys); err != nil {
+	if changed, err := a.mergeKeys(keys); err != nil {
 		return UIState{}, err
+	} else if changed {
+		a.bot.MarkRuntimeDirty("settings saved from Wails UI")
 	}
-	a.bot.MarkRuntimeDirty("settings saved from Wails UI")
 	return a.State()
+}
+
+// mergeKeys saves the keys typed into a form over the stored ones. Fields
+// left empty keep their key. Nothing is written when nothing was typed, and
+// nothing at all when the stored keys could not be read.
+func (a *App) mergeKeys(keys nullbot.APIKeys) (bool, error) {
+	typed := func(v string) bool { return strings.TrimSpace(v) != "" }
+	any := typed(keys.OpenAI) || typed(keys.Anthropic) || typed(keys.OpenRouter) || typed(keys.Google)
+	for provider, key := range keys.Other {
+		any = any || (typed(provider) && typed(key))
+	}
+	if !any {
+		return false, nil
+	}
+	current, err := a.bot.LoadAPIKeys()
+	if err != nil {
+		return false, fmt.Errorf("saved keys could not be read, so none were changed: %w", err)
+	}
+	set := func(dst *string, v string) {
+		if typed(v) {
+			*dst = strings.TrimSpace(v)
+		}
+	}
+	set(&current.OpenAI, keys.OpenAI)
+	set(&current.Anthropic, keys.Anthropic)
+	set(&current.OpenRouter, keys.OpenRouter)
+	set(&current.Google, keys.Google)
+	for provider, key := range keys.Other {
+		provider = strings.ToLower(strings.TrimSpace(provider))
+		if provider == "" || !typed(key) {
+			continue
+		}
+		if current.Other == nil {
+			current.Other = map[string]string{}
+		}
+		current.Other[provider] = strings.TrimSpace(key)
+	}
+	if err := a.bot.SaveAPIKeys(current); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (a *App) AccountStatus() (AccountState, error) {
@@ -582,36 +585,13 @@ func (a *App) AccountStatus() (AccountState, error) {
 }
 
 func (a *App) SaveAccountKeys(keys nullbot.APIKeys) (AccountState, error) {
-	current := a.bot.APIKeys()
-	if strings.TrimSpace(keys.OpenAI) != "" {
-		current.OpenAI = strings.TrimSpace(keys.OpenAI)
-	}
-	if strings.TrimSpace(keys.Anthropic) != "" {
-		current.Anthropic = strings.TrimSpace(keys.Anthropic)
-	}
-	if strings.TrimSpace(keys.OpenRouter) != "" {
-		current.OpenRouter = strings.TrimSpace(keys.OpenRouter)
-	}
-	if strings.TrimSpace(keys.Google) != "" {
-		current.Google = strings.TrimSpace(keys.Google)
-	}
-	if len(keys.Other) > 0 {
-		if current.Other == nil {
-			current.Other = map[string]string{}
-		}
-		for provider, key := range keys.Other {
-			provider = strings.ToLower(strings.TrimSpace(provider))
-			key = strings.TrimSpace(key)
-			if provider == "" || key == "" {
-				continue
-			}
-			current.Other[provider] = key
-		}
-	}
-	if err := a.bot.SaveAPIKeys(current); err != nil {
+	changed, err := a.mergeKeys(keys)
+	if err != nil {
 		return AccountState{}, err
 	}
-	a.bot.MarkRuntimeDirty("account credentials saved from Wails UI")
+	if changed {
+		a.bot.MarkRuntimeDirty("account credentials saved from Wails UI")
+	}
 	return a.accountState(), nil
 }
 
@@ -1546,8 +1526,9 @@ func (a *App) SaveCurrentSession(name string) (SessionSummary, error) {
 	return SessionSummary{SessionID: slug, Path: path, Messages: len(state.History), Preview: "saved current visible chat", Modified: info.ModTime()}, nil
 }
 
+// Tasks lists every chat's subagents and background tasks.
 func (a *App) Tasks() ([]nullbot.AgentTask, error) {
-	return a.bot.TaskSnapshots(), nil
+	return a.allTasks(), nil
 }
 
 func (a *App) ScheduledTasks() ([]nullbot.ScheduledTask, error) {
@@ -1583,10 +1564,7 @@ func (a *App) DeleteScheduledTask(id string) ([]nullbot.ScheduledTask, error) {
 }
 
 func (a *App) CancelTask(id string) ([]nullbot.AgentTask, error) {
-	if !a.bot.CancelTask(id) {
-		return a.bot.TaskSnapshots(), fmt.Errorf("task not cancelable or not found")
-	}
-	return a.bot.TaskSnapshots(), nil
+	return a.CancelChatTask(nullbot.MainChat, id)
 }
 
 func (a *App) Thoughts() ([]nullbot.ThoughtSnapshot, error) {
