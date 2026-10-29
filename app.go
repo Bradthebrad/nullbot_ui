@@ -531,36 +531,53 @@ func (a *App) SaveConfig(config nullbot.Config, keys nullbot.APIKeys) (UIState, 
 	}); err != nil {
 		return UIState{}, err
 	}
-	currentKeys := a.bot.APIKeys()
-	if strings.TrimSpace(keys.OpenAI) != "" {
-		currentKeys.OpenAI = keys.OpenAI
-	}
-	if strings.TrimSpace(keys.Anthropic) != "" {
-		currentKeys.Anthropic = keys.Anthropic
-	}
-	if strings.TrimSpace(keys.OpenRouter) != "" {
-		currentKeys.OpenRouter = keys.OpenRouter
-	}
-	if strings.TrimSpace(keys.Google) != "" {
-		currentKeys.Google = keys.Google
-	}
-	if len(keys.Other) > 0 {
-		if currentKeys.Other == nil {
-			currentKeys.Other = map[string]string{}
-		}
-		for provider, key := range keys.Other {
-			provider = strings.ToLower(strings.TrimSpace(provider))
-			if provider == "" || strings.TrimSpace(key) == "" {
-				continue
-			}
-			currentKeys.Other[provider] = strings.TrimSpace(key)
-		}
-	}
-	if err := a.bot.SaveAPIKeys(currentKeys); err != nil {
+	if changed, err := a.mergeKeys(keys); err != nil {
 		return UIState{}, err
+	} else if changed {
+		a.bot.MarkRuntimeDirty("settings saved from Wails UI")
 	}
-	a.bot.MarkRuntimeDirty("settings saved from Wails UI")
 	return a.State()
+}
+
+// mergeKeys saves the keys typed into a form over the stored ones. Fields
+// left empty keep their key. Nothing is written when nothing was typed, and
+// nothing at all when the stored keys could not be read.
+func (a *App) mergeKeys(keys nullbot.APIKeys) (bool, error) {
+	typed := func(v string) bool { return strings.TrimSpace(v) != "" }
+	any := typed(keys.OpenAI) || typed(keys.Anthropic) || typed(keys.OpenRouter) || typed(keys.Google)
+	for provider, key := range keys.Other {
+		any = any || (typed(provider) && typed(key))
+	}
+	if !any {
+		return false, nil
+	}
+	current, err := a.bot.LoadAPIKeys()
+	if err != nil {
+		return false, fmt.Errorf("saved keys could not be read, so none were changed: %w", err)
+	}
+	set := func(dst *string, v string) {
+		if typed(v) {
+			*dst = strings.TrimSpace(v)
+		}
+	}
+	set(&current.OpenAI, keys.OpenAI)
+	set(&current.Anthropic, keys.Anthropic)
+	set(&current.OpenRouter, keys.OpenRouter)
+	set(&current.Google, keys.Google)
+	for provider, key := range keys.Other {
+		provider = strings.ToLower(strings.TrimSpace(provider))
+		if provider == "" || !typed(key) {
+			continue
+		}
+		if current.Other == nil {
+			current.Other = map[string]string{}
+		}
+		current.Other[provider] = strings.TrimSpace(key)
+	}
+	if err := a.bot.SaveAPIKeys(current); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (a *App) AccountStatus() (AccountState, error) {
@@ -568,36 +585,13 @@ func (a *App) AccountStatus() (AccountState, error) {
 }
 
 func (a *App) SaveAccountKeys(keys nullbot.APIKeys) (AccountState, error) {
-	current := a.bot.APIKeys()
-	if strings.TrimSpace(keys.OpenAI) != "" {
-		current.OpenAI = strings.TrimSpace(keys.OpenAI)
-	}
-	if strings.TrimSpace(keys.Anthropic) != "" {
-		current.Anthropic = strings.TrimSpace(keys.Anthropic)
-	}
-	if strings.TrimSpace(keys.OpenRouter) != "" {
-		current.OpenRouter = strings.TrimSpace(keys.OpenRouter)
-	}
-	if strings.TrimSpace(keys.Google) != "" {
-		current.Google = strings.TrimSpace(keys.Google)
-	}
-	if len(keys.Other) > 0 {
-		if current.Other == nil {
-			current.Other = map[string]string{}
-		}
-		for provider, key := range keys.Other {
-			provider = strings.ToLower(strings.TrimSpace(provider))
-			key = strings.TrimSpace(key)
-			if provider == "" || key == "" {
-				continue
-			}
-			current.Other[provider] = key
-		}
-	}
-	if err := a.bot.SaveAPIKeys(current); err != nil {
+	changed, err := a.mergeKeys(keys)
+	if err != nil {
 		return AccountState{}, err
 	}
-	a.bot.MarkRuntimeDirty("account credentials saved from Wails UI")
+	if changed {
+		a.bot.MarkRuntimeDirty("account credentials saved from Wails UI")
+	}
 	return a.accountState(), nil
 }
 
