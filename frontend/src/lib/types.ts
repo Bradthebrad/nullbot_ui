@@ -141,7 +141,7 @@ export type ModelOption = {provider?: string; id: string; name?: string; descrip
 export type ModelGroup = {provider: string; title?: string; models: ModelOption[]; error?: string};
 
 /** A model server you host: Ollama, llama.cpp, LM Studio, vLLM or another OpenAI-compatible server. */
-export type LocalEndpoint = {id: string; name?: string; kind: string; base_url: string; key_secret?: string; disabled?: boolean};
+export type LocalEndpoint = {id: string; name?: string; kind: string; base_url: string; key_secret?: string; plain_http?: boolean; disabled?: boolean};
 export type LocalModel = {id: string; name?: string; context_window?: number; max_context?: number; context_note?: string; size?: number; parameters?: string; quantization?: string; family?: string; loaded?: boolean; capabilities?: string[]; embedding?: boolean};
 export type LocalEndpointInfo = LocalEndpoint & {provider: string; title: string; kind_label: string; status: {reachable: boolean; version?: string; error?: string; latency_ns?: number}; models?: LocalModel[]; insecure?: boolean};
 export type LocalServerFound = {kind: string; base_url: string; version?: string; models: number; label: string; configured_as?: string};

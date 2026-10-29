@@ -253,16 +253,20 @@ function ServerForm({kinds, value, previous, onCancel, onSaved}: {kinds: LocalSe
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => {
-    api.secrets().then(list => setSecrets((Array.isArray(list) ? list : []).filter(s => s.kind === 'api_key' || s.kind === 'generic'))).catch(() => undefined);
+    api.secrets().then(list => setSecrets((Array.isArray(list) ? list : []).filter(s => s.kind === 'api_key'))).catch(() => undefined);
   }, []);
   const kind = kinds.find(k => k.id === draft.kind);
   const set = (patch: Partial<LocalEndpoint>) => setDraft(prev => ({...prev, ...patch}));
+  const id = (draft.id || draft.kind).trim().toLowerCase();
+  // A server only gets a key meant for it: provider "local" or its own ID.
+  const usable = secrets.filter(s => keyFits(s, id) || s.name === draft.key_secret);
+  const plain = Boolean(draft.key_secret) && sendsKeyInTheClear(draft.base_url || kind?.default_url || '');
 
   async function save() {
     setSaving(true);
     setError('');
     try {
-      await api.saveLocalEndpoint(draft, previous);
+      await api.saveLocalEndpoint({...draft, plain_http: plain && Boolean(draft.plain_http)}, previous);
       await onSaved();
     } catch (e) {
       setError(String(e instanceof Error ? e.message : e));
@@ -301,11 +305,17 @@ function ServerForm({kinds, value, previous, onCancel, onSaved}: {kinds: LocalSe
           <span>API key</span>
           <select className="select" value={draft.key_secret || ''} onChange={e => set({key_secret: e.target.value})}>
             <option value="">None</option>
-            {secrets.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+            {usable.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
           </select>
-          <small>Only for a server started with a key. Add the key in Secrets first.</small>
+          <small>Only for a server started with a key: an API key in Secrets with provider <code>local</code> or <code>{id}</code>.</small>
         </label>
       </div>
+      {plain && (
+        <label className="check notice warn">
+          <input type="checkbox" checked={Boolean(draft.plain_http)} onChange={e => set({plain_http: e.target.checked})} />
+          <span>Send the key over plain http. Anyone on the network between here and the server could read it; https or an SSH tunnel keeps it private.</span>
+        </label>
+      )}
       {error && <p className="notice bad" role="alert">{error}</p>}
       <div className="row-actions">
         <button type="button" className="btn" onClick={onCancel}>Cancel</button>
@@ -313,4 +323,24 @@ function ServerForm({kinds, value, previous, onCancel, onSaved}: {kinds: LocalSe
       </div>
     </form>
   );
+}
+
+function keyFits(secret: SecretInfo, id: string) {
+  const provider = (secret.public?.provider || '').toLowerCase();
+  return provider === 'local' || provider === id || provider === `local-${id}`;
+}
+
+// sendsKeyInTheClear: plain http to anything but this computer.
+export function sendsKeyInTheClear(address: string) {
+  const raw = address.trim();
+  if (!raw) return false;
+  let url: URL;
+  try {
+    url = new URL(raw.includes('://') ? raw : `http://${raw}`);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'http:') return false;
+  const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  return !(host === 'localhost' || host.endsWith('.localhost') || host === '::1' || /^127\./.test(host));
 }

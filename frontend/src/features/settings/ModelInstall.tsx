@@ -158,7 +158,7 @@ function Builds({model, onBack}: {model: HFModel; onBack: () => void}) {
                   <td className="mono">{b.name}{b.parts > 1 ? <span className="faint"> ({b.parts} parts)</span> : null}</td>
                   <td>{b.quant || '—'}{b.recommended && <span className="tag ok">Suggested</span>}</td>
                   <td className="num">{formatBytes(b.size)}</td>
-                  <td>{b.complete ? <button type="button" className="btn btn-sm" disabled={chosen.target === 'ollama' && !b.quant} aria-label={`Install ${b.name}`} onClick={() => void install(b)}>Install</button> : <span className="faint">Parts missing</span>}</td>
+                  <td>{b.complete ? <button type="button" className="btn btn-sm" disabled={chosen.target === 'ollama' && (!b.quant || b.parts > 1)} title={chosen.target === 'ollama' && b.parts > 1 ? 'Ollama cannot pull a build split into parts; save it to a folder instead' : undefined} aria-label={`Install ${b.name}`} onClick={() => void install(b)}>Install</button> : <span className="faint">Parts missing</span>}</td>
                 </tr>
               ))}
             </tbody>

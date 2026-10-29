@@ -5,7 +5,7 @@ import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/
 import {installBridge, type FakeBridge} from '../../test/bridge';
 import {appStore} from '../../state/app';
 import {DialogHost} from '../../ui/dialogs';
-import {LocalServers} from './LocalServers';
+import {LocalServers, sendsKeyInTheClear} from './LocalServers';
 
 let bridge: FakeBridge;
 let endpoints: any[];
@@ -31,7 +31,12 @@ beforeEach(() => {
     PullLocalModel: () => undefined,
     ModelCatalog: () => [],
     State: () => ({config: {}}),
-    Secrets: () => [{name: 'lab-key', kind: 'api_key'}, {name: 'gh', kind: 'github_token'}],
+    Secrets: () => [
+      {name: 'lab-key', kind: 'api_key', public: {provider: 'gpu'}},
+      {name: 'any-local', kind: 'api_key', public: {provider: 'local'}},
+      {name: 'openai', kind: 'api_key', public: {provider: 'openai'}},
+      {name: 'gh', kind: 'github_token'},
+    ],
   });
 });
 
@@ -56,7 +61,7 @@ describe('model servers', () => {
     await screen.findByText('Added as lmstudio');
   });
 
-  it('adds a server by address with a key from the vault, offering only key secrets', async () => {
+  it('adds a server by address with a key meant for it, and asks before sending it over plain http', async () => {
     render(<LocalServers />);
     fireEvent.click(await screen.findByRole('button', {name: 'Add a server'}));
     const form = screen.getByRole('form', {name: 'Add a model server'});
@@ -64,10 +69,25 @@ describe('model servers', () => {
     fireEvent.change(within(form).getByRole('textbox', {name: /Address/}), {target: {value: 'http://gpu-box.lan:8000'}});
     fireEvent.change(within(form).getByRole('textbox', {name: /^ID/}), {target: {value: 'gpu'}});
     await waitFor(() => expect(within(form).getAllByRole('option', {name: 'lab-key'})).toHaveLength(1));
+    expect(within(form).getByRole('option', {name: 'any-local'})).toBeTruthy();
+    // Other providers' keys and other kinds of secret are never offered.
+    expect(within(form).queryByRole('option', {name: 'openai'})).toBeNull();
     expect(within(form).queryByRole('option', {name: 'gh'})).toBeNull();
+    expect(within(form).queryByRole('checkbox', {name: /plain http/})).toBeNull();
     fireEvent.change(within(form).getByRole('combobox', {name: /API key/}), {target: {value: 'lab-key'}});
+    const plain = within(form).getByRole('checkbox', {name: /Send the key over plain http/});
+    fireEvent.click(plain);
     fireEvent.click(within(form).getByRole('button', {name: 'Add server'}));
-    await waitFor(() => expect(bridge.callsTo('SaveLocalEndpoint')).toEqual([[{id: 'gpu', kind: 'vllm', base_url: 'http://gpu-box.lan:8000', name: '', key_secret: 'lab-key'}, '']]));
+    await waitFor(() => expect(bridge.callsTo('SaveLocalEndpoint')).toEqual([[{id: 'gpu', kind: 'vllm', base_url: 'http://gpu-box.lan:8000', name: '', key_secret: 'lab-key', plain_http: true}, '']]));
+  });
+
+  it('knows which addresses send a key in the clear', () => {
+    expect(sendsKeyInTheClear('http://gpu-box.lan:8000')).toBe(true);
+    expect(sendsKeyInTheClear('192.168.1.4:8000')).toBe(true);
+    expect(sendsKeyInTheClear('https://llm.example.com')).toBe(false);
+    expect(sendsKeyInTheClear('http://localhost:11434')).toBe(false);
+    expect(sendsKeyInTheClear('http://127.0.0.1:8080')).toBe(false);
+    expect(sendsKeyInTheClear('http://[::1]:8080')).toBe(false);
   });
 
   it('pulls a model into Ollama and shows its progress', async () => {
