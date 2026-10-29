@@ -134,8 +134,11 @@ the agent asks for it and the project has the Full permission. Details are in
 ## Agents, runs, plans and schedules
 
 Pick the manager's model and, separately, the subagents' model, from any
-provider you have set up: a ChatGPT subscription (sign in), OpenAI, Anthropic
-or OpenRouter. Context windows are filled in from the provider or a built-in
+provider you have set up: a ChatGPT subscription (sign in), a Claude
+subscription through your installed `claude` command, OpenAI, Anthropic or
+OpenRouter. With a Claude CLI model, Claude works with its own tools within
+the project's permission, and its reading, edits and commands show in the
+activity panel as they happen. Context windows are filled in from the provider or a built-in
 table and can be overridden. **Activity** lists every run, subagent and
 scheduled task, with its tools, tokens and result; plans show their steps and
 can be continued; schedules run once, at a time, or on repeat.
@@ -217,7 +220,8 @@ any past conversation.
 
 ## Accounts
 
-**Settings > Accounts** holds API keys, the ChatGPT subscription sign-in, and
+**Settings > Accounts** holds API keys, the ChatGPT subscription sign-in,
+whether the `claude` command is installed and signed in, and
 service accounts for the email, drives and messages servers: Gmail (API or
 IMAP/SMTP with an app password), Outlook, Google Drive, OneDrive, iCloud Drive
 folders, Twilio, WhatsApp Business, Discord and Telegram bots, and a local

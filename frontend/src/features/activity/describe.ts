@@ -128,6 +128,25 @@ const registry: Record<string, Describer> = {
   command_output: () => ({verb: v('Reading', 'Read', 'Couldn’t read'), object: 'command output', category: 'command'}),
   command_kill: () => ({verb: v('Stopping', 'Stopped', 'Couldn’t stop'), object: 'a command', category: 'command'}),
 
+  // Claude's own tools, when a Claude CLI model is working
+  Read: a => ({verb: v('Reading', 'Read', 'Couldn’t read'), object: fileLabel(pick(a, 'file_path', 'path')) || 'a file', category: 'file'}),
+  Write: a => ({verb: v('Writing', 'Wrote', 'Couldn’t write'), object: fileLabel(pick(a, 'file_path', 'path')) || 'a file', category: 'edit'}),
+  Edit: a => ({verb: v('Editing', 'Edited', 'Couldn’t edit'), object: fileLabel(pick(a, 'file_path', 'path')) || 'a file', category: 'edit'}),
+  NotebookEdit: a => ({verb: v('Editing', 'Edited', 'Couldn’t edit'), object: fileLabel(pick(a, 'notebook_path', 'path')) || 'a notebook', category: 'edit'}),
+  Bash: (a, s) => {
+    // Claude describes each command in the imperative ("Run the tests").
+    const said = shorten(pick(a, 'description'), 56);
+    if (said) return {verb: v('', '', 'Couldn’t'), object: s.state === 'error' || s.state === 'blocked' ? lowerFirst(said) : said, category: 'command'};
+    return {verb: v('Running', 'Ran', 'Couldn’t run'), object: shorten(pick(a, 'command') || 'a command', 56), category: 'command'};
+  },
+  Grep: a => ({verb: v('Searching for', 'Searched for', 'Couldn’t search for'), object: `${quoted(pick(a, 'pattern'), 32)}${pick(a, 'path') ? ` in ${pathLabel(pick(a, 'path'))}` : ''}`, category: 'search'}),
+  Glob: a => ({verb: v('Finding', 'Found', 'Couldn’t find'), object: `files matching ${quoted(pick(a, 'pattern'), 32)}`, category: 'search'}),
+  WebFetch: a => ({verb: v('Opening', 'Opened', 'Couldn’t open'), object: urlLabel(pick(a, 'url')) || 'a page', category: 'web'}),
+  WebSearch: a => ({verb: v('Searching', 'Searched', 'Couldn’t search'), object: `the web for ${quoted(pick(a, 'query'))}`.trim(), category: 'search'}),
+  TodoWrite: () => ({verb: v('Updating', 'Updated', 'Couldn’t update'), object: 'its to-do list', category: 'agent'}),
+  Agent: a => ({verb: v('Starting', 'Started', 'Couldn’t start'), object: `a subagent ${quoted(pick(a, 'description'), 32)}`.trim(), category: 'agent'}),
+  Task: a => ({verb: v('Starting', 'Started', 'Couldn’t start'), object: `a subagent ${quoted(pick(a, 'description'), 32)}`.trim(), category: 'agent'}),
+
   // NullBot built-ins
   visualize: a => ({verb: v('Showing you', 'Showed you', 'Couldn’t show you'), object: quoted(pick(a, 'title'), 48) || 'a visual', category: 'image'}),
   visualize_results: () => ({verb: v('Reading', 'Read', 'Couldn’t read'), object: 'your responses to visuals', category: 'nullbot'}),
@@ -273,7 +292,7 @@ export function describeStep(step: Step): StepDescription {
   const phrase = describer ? describer(args, step) : genericPhrase(name, args, step);
   const verb = step.state === 'running' ? phrase.verb[0] : step.state === 'done' ? phrase.verb[1] : phrase.verb[2];
   const title = [verb, phrase.object].filter(Boolean).join(' ');
-  return {title: step.state === 'blocked' ? `Blocked: ${lowerFirst(phrase.verb[0])} ${phrase.object || ''}`.trim() : title, detail: stepDetail(step), category: phrase.category};
+  return {title: step.state === 'blocked' ? `Blocked: ${[lowerFirst(phrase.verb[0]), phrase.object].filter(Boolean).join(' ')}` : title, detail: stepDetail(step), category: phrase.category};
 }
 
 function lowerFirst(value: string) {

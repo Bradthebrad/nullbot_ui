@@ -97,7 +97,13 @@ export function ingestChatStream(messages: any[], record: any) {
   const item = {...(previous || {role: 'assistant', content: '', summaries: [], commentary: [], time: record.time, run_id: record.run_id, submission_id: record.submission_id, streamKey: key, historyAnchor: messages.filter(message => message.role === 'assistant' && !message.streamKey && !message.pending).length}), summaries: [...(previous?.summaries || [])], commentary: [...(previous?.commentary || [])]};
   const text = String(record.detail || '');
   if (status === 'response delta' && record.channel !== 'commentary') item.content += text;
-  if (status === 'commentary delta' || status === 'commentary' || (status === 'response delta' && record.channel === 'commentary')) {
+  if (status === 'commentary' && item.content.trim() && item.content.trim() === text.trim()) {
+    // The text streamed so far led to a tool call: it was commentary, not
+    // the answer. Move it rather than showing it twice.
+    item.commentary.push(text);
+    item.content = '';
+    item.lastChannel = 'commentary';
+  } else if (status === 'commentary delta' || status === 'commentary' || (status === 'response delta' && record.channel === 'commentary')) {
     const last = item.commentary.length - 1;
     if (last >= 0 && item.lastChannel === 'commentary' && status !== 'commentary') item.commentary[last] += text;
     else item.commentary.push(text);
