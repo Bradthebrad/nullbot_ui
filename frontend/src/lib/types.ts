@@ -138,7 +138,15 @@ export type MCPServerStatus = {
 };
 
 export type ModelOption = {provider?: string; id: string; name?: string; description?: string; reasoning?: boolean; responses?: boolean; context_window?: number; context_source?: string};
-export type ModelGroup = {provider: string; models: ModelOption[]; error?: string};
+export type ModelGroup = {provider: string; title?: string; models: ModelOption[]; error?: string};
+
+/** A model server you host: Ollama, llama.cpp, LM Studio, vLLM or another OpenAI-compatible server. */
+export type LocalEndpoint = {id: string; name?: string; kind: string; base_url: string; key_secret?: string; disabled?: boolean};
+export type LocalModel = {id: string; name?: string; context_window?: number; max_context?: number; context_note?: string; size?: number; parameters?: string; quantization?: string; family?: string; loaded?: boolean; capabilities?: string[]; embedding?: boolean};
+export type LocalEndpointInfo = LocalEndpoint & {provider: string; title: string; kind_label: string; status: {reachable: boolean; version?: string; error?: string; latency_ns?: number}; models?: LocalModel[]; insecure?: boolean};
+export type LocalServerFound = {kind: string; base_url: string; version?: string; models: number; label: string; configured_as?: string};
+export type LocalServerKind = {id: string; label: string; default_url: string};
+export type ModelPullEvent = {server: string; model: string; status: string; completed?: number; total?: number; done?: boolean; error?: string};
 
 export type AgentTask = {
   id: string;

@@ -26,6 +26,11 @@ const effortHelp: Record<string, string> = {
   xhigh: 'The most reasoning the provider offers. Slower and costlier.',
 };
 
+/** A provider's name for people: a local server goes by its own title. */
+export function providerLabel(provider: string, groups: ModelGroup[] = []): string {
+  return providerNames[provider] || groups.find(g => g.provider === provider)?.title || (provider.startsWith('local:') ? provider.slice(6) : provider);
+}
+
 export const providerNames: Record<string, string> = {codex: 'ChatGPT subscription (Codex)', 'claude-cli': 'Claude subscription (Claude CLI)', openai: 'OpenAI', anthropic: 'Anthropic', openrouter: 'OpenRouter'};
 
 /** Whether NullBot has what it needs to call a provider, from runtime status. */
@@ -155,7 +160,7 @@ export function ModelFields({value, groups, runtime, onChange, overrides, onOver
             set({provider, model: groups.find(g => g.provider === provider)?.models?.[0]?.id || ''});
           }}>
             {!value.provider && <option value="">Choose</option>}
-            {providers.map(p => <option key={p} value={p}>{providerNames[p] || p}{providerReady(runtime, p) === false ? ' (not set up)' : ''}</option>)}
+            {providers.map(p => <option key={p} value={p}>{providerLabel(p, groups)}{providerReady(runtime, p) === false ? ' (not set up)' : ''}</option>)}
           </select>
         </label>
         <ModelPicker provider={value.provider} value={value.model} groups={groups} onChange={model => set({model})} />

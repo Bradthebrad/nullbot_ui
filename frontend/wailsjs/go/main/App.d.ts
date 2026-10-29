@@ -268,3 +268,21 @@ export function VisualPage(arg1:string,arg2:string,arg3:string):Promise<any>;
 export function Visualization(arg1:string):Promise<any>;
 
 export function Visualizations(arg1:string):Promise<Array<any>>;
+
+export function LocalEndpoints(arg1:any):Promise<any>;
+
+export function SaveLocalEndpoint(arg1:any,arg2:any):Promise<any>;
+
+export function RemoveLocalEndpoint(arg1:any):Promise<void>;
+
+export function FindLocalServers():Promise<any>;
+
+export function LocalServerKinds():Promise<any>;
+
+export function PullLocalModel(arg1:any,arg2:any):Promise<void>;
+
+export function CancelLocalPull(arg1:any,arg2:any):Promise<void>;
+
+export function CopyLocalModelWithContext(arg1:any,arg2:any,arg3:any):Promise<string>;
+
+export function DeleteLocalModel(arg1:any,arg2:any):Promise<void>;

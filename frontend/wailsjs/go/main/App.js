@@ -533,3 +533,39 @@ export function Visualization(arg1) {
 export function Visualizations(arg1) {
   return window['go']['main']['App']['Visualizations'](arg1);
 }
+
+export function LocalEndpoints(arg1) {
+  return window['go']['main']['App']['LocalEndpoints'](arg1);
+}
+
+export function SaveLocalEndpoint(arg1,arg2) {
+  return window['go']['main']['App']['SaveLocalEndpoint'](arg1,arg2);
+}
+
+export function RemoveLocalEndpoint(arg1) {
+  return window['go']['main']['App']['RemoveLocalEndpoint'](arg1);
+}
+
+export function FindLocalServers() {
+  return window['go']['main']['App']['FindLocalServers']();
+}
+
+export function LocalServerKinds() {
+  return window['go']['main']['App']['LocalServerKinds']();
+}
+
+export function PullLocalModel(arg1,arg2) {
+  return window['go']['main']['App']['PullLocalModel'](arg1,arg2);
+}
+
+export function CancelLocalPull(arg1,arg2) {
+  return window['go']['main']['App']['CancelLocalPull'](arg1,arg2);
+}
+
+export function CopyLocalModelWithContext(arg1,arg2,arg3) {
+  return window['go']['main']['App']['CopyLocalModelWithContext'](arg1,arg2,arg3);
+}
+
+export function DeleteLocalModel(arg1,arg2) {
+  return window['go']['main']['App']['DeleteLocalModel'](arg1,arg2);
+}

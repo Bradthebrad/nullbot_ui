@@ -5,6 +5,7 @@ import type {
   AgentTask, FileBrowser, FileSearchKind, FileSearchResult, HistoryEntry, HistoryQuery, HistorySearchResult, FilePreview, MCPServerStatus, MarketState, ModelGroup, Plan, ProjectsState, Project,
   Reply, ScheduledTask, SessionSummary, SkillFile, SubmissionSnapshot, UIState, UsageReport, Visualization, VisualDelivery, VisualEvent, VisualView,
   VaultInfo, SecretInfo, SecretKind, SecretInput, GitHubIdentity, ChatInfo,
+  LocalEndpoint, LocalEndpointInfo, LocalServerFound, LocalServerKind,
 } from './types';
 
 const go = Go as unknown as Record<string, (...args: any[]) => Promise<any>>;
@@ -31,6 +32,15 @@ export const api = {
   saveConfig: (config: any, keys: any) => call<UIState>('SaveConfig', config, keys),
   setModel: (provider: string, model: string, target: string) => call<UIState>('SetModel', provider, model, target),
   modelCatalog: (refresh: boolean) => call<ModelGroup[]>('ModelCatalog', refresh),
+  localEndpoints: (check: boolean) => call<LocalEndpointInfo[]>('LocalEndpoints', check),
+  saveLocalEndpoint: (endpoint: LocalEndpoint, previousID = '') => call<LocalEndpoint>('SaveLocalEndpoint', endpoint, previousID),
+  removeLocalEndpoint: (id: string) => call<void>('RemoveLocalEndpoint', id),
+  findLocalServers: () => call<LocalServerFound[]>('FindLocalServers'),
+  localServerKinds: () => call<LocalServerKind[]>('LocalServerKinds'),
+  pullLocalModel: (server: string, model: string) => call<void>('PullLocalModel', server, model),
+  cancelLocalPull: (server: string, model: string) => call<void>('CancelLocalPull', server, model),
+  copyLocalModelWithContext: (server: string, from: string, numCtx: number) => call<string>('CopyLocalModelWithContext', server, from, numCtx),
+  deleteLocalModel: (server: string, model: string) => call<void>('DeleteLocalModel', server, model),
   setAppearance: (appearance: string, accent: string) => call<UIState>('SetAppearance', appearance, accent),
   setBotName: (name: string) => call<UIState>('SetBotName', name),
   savePrompts: (prompts: any) => call<UIState>('SavePrompts', prompts),

@@ -556,3 +556,17 @@ mark { padding: 0 1px; border-radius: 2px; background: var(--signal-soft); color
 .server-picks legend { margin-bottom: 6px; color: var(--ink-2); font-size: var(--text-sm); font-weight: 500; }
 .secret-editor .check { margin-top: 14px; }
 .secret-text { min-height: 96px; }
+
+/* local model servers */
+.local-found { display: grid; gap: 6px; margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--surface-2); }
+.local-found-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; font-size: var(--text-sm); }
+.local-form { display: grid; gap: 12px; margin-bottom: 16px; padding: 14px; border: 1px solid var(--line-strong); border-radius: var(--r-2); }
+.local-models { display: grid; gap: 4px; margin: 4px 0 0; padding: 0; list-style: none; font-size: var(--text-sm); }
+.local-models li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; }
+.local-models .row-actions { margin-left: auto; }
+.local-pull { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 10px; font-size: var(--text-sm); }
+.local-pull .progress { grid-column: 1; }
+.local-pull .btn { grid-column: 2; grid-row: 1 / span 2; }
+.local-pull-form { display: flex; gap: 6px; margin-top: 4px; }
+.local-pull-form .input { flex: 1; min-width: 0; }
+.warn-text { color: var(--signal-ink); }
