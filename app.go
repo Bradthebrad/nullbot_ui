@@ -335,6 +335,7 @@ func (a *App) startup(ctx context.Context) {
 
 // shutdown stops background work and every MCP server process.
 func (a *App) shutdown(ctx context.Context) {
+	stopInfra()
 	if a.activityStop != nil {
 		a.activityStop()
 		a.activityStop = nil

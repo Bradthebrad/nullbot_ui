@@ -3,7 +3,7 @@ import {api} from '../lib/bindings';
 import {guard} from '../lib/dirty';
 import type {MCPServerStatus, ModelGroup, ProjectsState, UIState} from '../lib/types';
 
-export type View = 'chat' | 'activity' | 'files' | 'visuals' | 'tools' | 'history' | 'settings';
+export type View = 'chat' | 'activity' | 'files' | 'visuals' | 'tools' | 'history' | 'cloud' | 'settings';
 export type SettingsSection = 'projects' | 'models' | 'accounts' | 'secrets' | 'agent' | 'prompts' | 'appearance' | 'usage';
 
 export type AppState = {

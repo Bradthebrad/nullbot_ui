@@ -298,3 +298,29 @@ export function CancelInstall(arg1:any):Promise<void>;
 export function MachineHardware(arg1:any):Promise<any>;
 
 export function SuggestModels(arg1:any):Promise<any>;
+
+export function InfraState():Promise<any>;
+
+export function DecideInfraPlan(arg1:any,arg2:any,arg3:any):Promise<any>;
+
+export function RunInfraPlan(arg1:any):Promise<any>;
+
+export function StopInfraPlan(arg1:any):Promise<any>;
+
+export function PlanInfraDestroy(arg1:any,arg2:any,arg3:any):Promise<any>;
+
+export function InfraLedger(arg1:any,arg2:any):Promise<any>;
+
+export function SetInfraAgentTools(arg1:any):Promise<any>;
+
+export function InspectNode(arg1:any):Promise<any>;
+
+export function ThisComputer():Promise<any>;
+
+export function OpenTunnel(arg1:any,arg2:any,arg3:any):Promise<any>;
+
+export function Tunnels():Promise<any>;
+
+export function CloseTunnel(arg1:any):Promise<any>;
+
+export function ConnectNodeOllama(arg1:any):Promise<any>;

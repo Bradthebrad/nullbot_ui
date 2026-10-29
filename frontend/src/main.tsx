@@ -8,6 +8,7 @@ import './styles/chat.css';
 import './styles/trace.css';
 import './styles/views.css';
 import './styles/visuals.css';
+import './styles/cloud.css';
 import App from './App';
 
 // The app runs only as the window's own page. A visual that loads the app's

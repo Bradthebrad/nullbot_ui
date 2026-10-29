@@ -6,6 +6,7 @@ import type {
   Reply, ScheduledTask, SessionSummary, SkillFile, SubmissionSnapshot, UIState, UsageReport, Visualization, VisualDelivery, VisualEvent, VisualView,
   VaultInfo, SecretInfo, SecretKind, SecretInput, GitHubIdentity, ChatInfo,
   LocalEndpoint, LocalEndpointInfo, LocalServerFound, LocalServerKind, HFModel, HFBuild, InstallRequest, Hardware, ModelFitOptions, ModelFits,
+  InfraState, InfraPlan, InfraLedgerEntry, NodeReport, Tunnel,
 } from './types';
 
 const go = Go as unknown as Record<string, (...args: any[]) => Promise<any>>;
@@ -47,6 +48,20 @@ export const api = {
   cancelInstall: (id: string) => call<void>('CancelInstall', id),
   machineHardware: (refresh = false) => call<{hardware: Hardware; summary: string}>('MachineHardware', refresh),
   suggestModels: (options: ModelFitOptions) => call<ModelFits>('SuggestModels', options),
+  infraState: () => call<InfraState>('InfraState'),
+  /** Approve or reject a plan; approving with run also starts it. People only: no agent tool reaches this. */
+  decideInfraPlan: (id: string, approve: boolean, run = true) => call<InfraPlan>('DecideInfraPlan', id, approve, run),
+  runInfraPlan: (id: string) => call<void>('RunInfraPlan', id),
+  stopInfraPlan: (id: string) => call<boolean>('StopInfraPlan', id),
+  planInfraDestroy: (ids: string[], deleteContents: boolean, reason = '') => call<InfraPlan>('PlanInfraDestroy', ids, deleteContents, reason),
+  infraLedger: (plan = '', limit = 200) => call<InfraLedgerEntry[]>('InfraLedger', plan, limit),
+  setInfraAgentTools: (on: boolean) => call<void>('SetInfraAgentTools', on),
+  inspectNode: (id: string) => call<NodeReport>('InspectNode', id),
+  thisComputer: () => call<NodeReport>('ThisComputer'),
+  openTunnel: (id: string, remotePort: number, localPort = 0) => call<Tunnel>('OpenTunnel', id, remotePort, localPort),
+  tunnels: () => call<Tunnel[]>('Tunnels'),
+  closeTunnel: (id: string) => call<void>('CloseTunnel', id),
+  connectNodeOllama: (id: string) => call<LocalEndpoint>('ConnectNodeOllama', id),
   setAppearance: (appearance: string, accent: string) => call<UIState>('SetAppearance', appearance, accent),
   setBotName: (name: string) => call<UIState>('SetBotName', name),
   savePrompts: (prompts: any) => call<UIState>('SavePrompts', prompts),
