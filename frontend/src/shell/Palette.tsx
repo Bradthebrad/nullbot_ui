@@ -34,6 +34,7 @@ function useCommands(): Command[] {
       {id: 'go-prompts', group: 'Settings', title: 'System prompts', run: section('prompts')},
       {id: 'go-appearance', group: 'Settings', title: 'Appearance and bot name', keywords: 'theme dark light color', run: section('appearance')},
       {id: 'go-usage', group: 'Settings', title: 'Usage and cost', keywords: 'tokens', run: section('usage')},
+      {id: 'go-secrets', group: 'Settings', title: 'Secrets and GitHub', keywords: 'vault token ssh key password credentials aws gcp', run: section('secrets')},
       {id: 'new', group: 'Conversation', title: 'New conversation', keywords: 'clear reset', run: async () => {
         if (await confirmDialog({title: 'Start a new conversation?', body: 'The visible conversation is cleared. Saved sessions are kept.', confirmLabel: 'Start new'})) await clearConversation();
       }},

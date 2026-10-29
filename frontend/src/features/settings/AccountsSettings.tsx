@@ -1,7 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
 import {Copy, RefreshCw} from 'lucide-react';
 import {api} from '../../lib/bindings';
-import {refreshState} from '../../state/app';
+import {appStore, refreshState} from '../../state/app';
 import ServiceAccountsPanel from '../../ServiceAccountsPanel';
 import {StatusTag} from '../../ui/layout';
 import {toast, toastError} from '../../ui/toast';
@@ -45,7 +45,7 @@ export function AccountsSettings() {
       <header className="settings-head settings-head-row">
         <div>
           <h2>Accounts</h2>
-          <p className="muted">Model providers NullBot can use. Keys are stored on this computer and never shown again after saving.</p>
+          <p className="muted">Model providers NullBot can use. Keys are stored encrypted on this computer and never shown again after saving.</p>
         </div>
         <button className="btn" disabled={refreshing} onClick={() => void load()}>{refreshing ? <span className="spinner" /> : <RefreshCw size={13} />}Check again</button>
       </header>
@@ -66,7 +66,9 @@ export function AccountsSettings() {
             </div>
           ))}
         </div>
-        {state?.keys_path && <p className="faint">Keys file: <span className="mono">{state.keys_path}</span></p>}
+        {state?.keys_path && (state.keys_path.endsWith('vault.json')
+          ? <p className="faint">Keys are kept encrypted in the vault (<span className="mono">{state.keys_path}</span>). See <button className="link-button" onClick={() => appStore.set({settingsSection: 'secrets'})}>Secrets</button>.</p>
+          : <p className="faint">Keys file, in plain text because this system cannot encrypt it yet: <span className="mono">{state.keys_path}</span>. Set a vault passphrase in <button className="link-button" onClick={() => appStore.set({settingsSection: 'secrets'})}>Secrets</button>.</p>)}
       </div>
       <div className="settings-group">
         <ServiceAccountsPanel />

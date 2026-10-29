@@ -200,8 +200,8 @@ IMAP/SMTP with an app password), Outlook, Google Drive, OneDrive, iCloud Drive
 folders, Twilio, WhatsApp Business, Discord and Telegram bots, and a local
 Signal bridge.
 
-- Secrets are stored with Windows current-user DPAPI and never shown again.
-  Replacing an account replaces all of its fields.
+- Account credentials are stored with Windows current-user DPAPI and never
+  shown again. Replacing an account replaces all of its fields.
 - An account is passed only to the matching server installed from the
   Marketplace, checked against its pinned hash, and never to a server you
   added by hand.
@@ -212,6 +212,30 @@ Signal bridge.
 
 The account fields for each service, and their limits, are in
 [NullBot's docs/SERVICE_ACCOUNTS.md](https://github.com/Bradthebrad/nullbot/blob/main/docs/SERVICE_ACCOUNTS.md).
+
+## Secrets
+
+**Settings > Secrets** is the vault: every API key, the ChatGPT sign-in,
+GitHub tokens, SSH keys, AWS and Google Cloud credentials, and any other value
+you want agents to be able to use, encrypted on this computer with Windows
+DPAPI (the macOS keychain, the Linux Secret Service or a passphrase where
+NullBot runs elsewhere).
+
+- **Agents use secrets without seeing them.** A secret you allow can be put in
+  the environment of a command an agent runs (`secret_run`), and its value is
+  removed from everything the command prints. Every tool result is filtered
+  the same way before it reaches a model.
+- **GitHub in two clicks.** Save a token and NullBot checks who it signs in
+  as; make an Ed25519 SSH key and add its public key to that account. git over
+  HTTPS and SSH then just works in commands that ask for them.
+- **Off for agents by default.** Turning on *Agents may use* asks first, and a
+  tool server gets a secret only if you name it.
+- Keys saved in older versions in plain text are moved in and deleted.
+
+<img alt="Settings > Secrets: the vault protected by Windows DPAPI, a checked GitHub token, an SSH key added to GitHub, and every secret with what it gives commands" src="docs/images/secrets.png">
+
+How it works, and its limits, is in
+[NullBot's docs/SECRETS.md](https://github.com/Bradthebrad/nullbot/blob/main/docs/SECRETS.md).
 
 ## Other ways to run NullBot
 

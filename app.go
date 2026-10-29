@@ -1946,7 +1946,6 @@ func maskOtherKeys(keys map[string]string) map[string]string {
 func (a *App) accountState() AccountState {
 	config := a.bot.Config()
 	keys := a.bot.APIKeys()
-	authPath := nullbot.CodexAuthPath(config)
 	codexStatus := "not signed in"
 	codexDetail := "No NullBot Codex subscription login is saved yet. Sign in with ChatGPT to use subscription-backed Codex/OpenAI models without an API key."
 	if nullbot.CodexAuthPresent(config) {
@@ -1975,10 +1974,13 @@ func (a *App) accountState() AccountState {
 		}
 		accounts = append(accounts, apiAccount(provider, name+" API", strings.ToUpper(provider)+"_API_KEY", key, "Stored as a named provider key. Direct model runtime support depends on provider integration."))
 	}
+	// Keys and the sign-in are in the vault, unless this system cannot
+	// encrypt; the runtime reports which file holds them.
+	paths := nullbot.AccountStatus(config)
 	return AccountState{
 		Accounts:      accounts,
-		KeysPath:      nullbot.KeysPath(config),
-		CodexAuthPath: authPath,
+		KeysPath:      paths.KeysPath,
+		CodexAuthPath: paths.CodexAuthPath,
 	}
 }
 
