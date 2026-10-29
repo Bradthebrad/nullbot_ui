@@ -567,6 +567,7 @@ mark { padding: 0 1px; border-radius: 2px; background: var(--signal-soft); color
 .detail-body > .cloud-accounts { border-top: 0; }
 .detail-body > .cloud-accounts > .account:first-child { padding-top: 0; }
 .account.is-focused { margin-left: -12px; padding-left: 10px; border-left: 2px solid var(--signal); }
+.dot.attention { background: var(--signal); }
 .cloud-accounts-locked { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 
 /* local model servers */

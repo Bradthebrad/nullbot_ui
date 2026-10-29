@@ -166,7 +166,7 @@ export function CloudView() {
                   key={a.name}
                   selected={current === `account:${a.name}`}
                   onSelect={() => selectInfra(`account:${a.name}`)}
-                  tone={a.checked ? 'ok' : 'idle'}
+                  tone={a.checked && !a.note ? 'ok' : 'idle'}
                   title={a.name}
                   subtitle={accountSummary(a)}
                 />
@@ -198,7 +198,7 @@ export function CloudView() {
 }
 
 function accountSummary(a: CloudAccount) {
-  return [cloudName(a.cloud), a.region || a.project, a.checked ? '' : 'not checked'].filter(Boolean).join(', ');
+  return [cloudName(a.cloud), a.region || a.project, !a.checked ? 'not checked' : a.note ? 'needs setup' : ''].filter(Boolean).join(', ');
 }
 
 function AccountsDetail({focus}: {focus: string}) {

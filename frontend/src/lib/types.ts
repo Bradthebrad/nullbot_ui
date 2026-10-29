@@ -361,7 +361,7 @@ export type InfraState = {
 };
 /** An aws or gcp secret as the Cloud view lists it. */
 export type CloudAccount = {
-  name: string; cloud: 'aws' | 'gcp' | string; region?: string; project?: string; account?: string; identity?: string; checked?: string; agent_use: boolean;
+  name: string; cloud: 'aws' | 'gcp' | string; region?: string; project?: string; account?: string; identity?: string; checked?: string; note?: string; agent_use: boolean;
 };
 /** What checking a cloud account found; note says what it cannot do yet. */
 export type CloudIdentity = {name: string; cloud: string; account?: string; identity?: string; region?: string; project?: string; note?: string};

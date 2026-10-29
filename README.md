@@ -248,8 +248,11 @@ takes an IAM user's access key and region, **Add Google Cloud account** a
 service account's JSON key file. Each is checked as soon as it is saved, and
 **Check** asks again: AWS says which account and user the key signs in as,
 Google Cloud whether it signs in and can use Compute Engine. Checking
-changes nothing and costs nothing. The account says when the `aws` or
-`gcloud` command it needs is not installed.
+changes nothing and costs nothing. A key that signs in but cannot be used
+yet is marked **Needs setup**, with what to fix. The account says when the
+`aws` or `gcloud` command it needs is not installed.
+
+<img alt="Cloud accounts: an AWS account checked against its account and IAM user, and a Google Cloud account that signs in but needs the Compute Engine API turned on, with buttons to add AWS and Google Cloud accounts" src="docs/images/cloud-accounts.png">
 
 <img alt="A plan waiting for approval: why the main agent asked for a GPU machine, what it makes and costs, and its first commands, with Reject and Approve and run at the bottom" src="docs/images/cloud-plan.png">
 

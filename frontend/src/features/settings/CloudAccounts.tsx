@@ -54,26 +54,43 @@ export function CloudAccounts({focus}: {focus?: string}) {
   const [editing, setEditing] = useState<{cloud?: Cloud; secret?: SecretInfo} | null>(null);
   const [checking, setChecking] = useState<Record<string, boolean>>({});
   const [results, setResults] = useState<Record<string, Result>>({});
+  // Only an account's latest check reports: an earlier one still running
+  // (Check, then Replace) neither re-enables Check nor overwrites it.
+  const seq = useRef<Record<string, number>>({});
   const all = secrets.data || [];
   const accounts = all.filter(isCloudAccount);
   const tools = state.data?.tools || {};
   const missing = (cloud: Cloud) => String(tools[clouds[cloud].tool] || '').startsWith('missing');
 
   async function check(name: string) {
+    const n = (seq.current[name] || 0) + 1;
+    seq.current[name] = n;
+    const latest = () => seq.current[name] === n;
     setChecking(current => ({...current, [name]: true}));
     setResults(current => ({...current, [name]: {}}));
     try {
       const id: CloudIdentity = await api.checkCloudAccount(name);
-      setResults(current => ({...current, [name]: {note: id.note}}));
+      if (!latest()) return;
+      setResults(current => ({...current, [name]: {note: id.note || ''}}));
       if (!id.note) {
         toast(id.cloud === 'aws' ? `${name} signs in to AWS account ${id.account}.` : `${name} signs in to Google Cloud as ${id.identity || 'its service account'}.`, 'success');
       }
     } catch (err) {
-      setResults(current => ({...current, [name]: {error: message(err)}}));
+      if (latest()) setResults(current => ({...current, [name]: {error: message(err)}}));
     } finally {
-      setChecking(current => ({...current, [name]: false}));
+      if (latest()) setChecking(current => ({...current, [name]: false}));
       secrets.reload();
     }
+  }
+
+  function forget(name: string) {
+    seq.current[name] = (seq.current[name] || 0) + 1;
+    setChecking(current => ({...current, [name]: false}));
+    setResults(current => {
+      const next = {...current};
+      delete next[name];
+      return next;
+    });
   }
 
   if (secrets.error) {
@@ -130,6 +147,8 @@ export function CloudAccounts({focus}: {focus?: string}) {
           onClose={() => setEditing(null)}
           onSaved={saved => {
             setEditing(null);
+            // What was said about the old key no longer applies.
+            forget(saved.name);
             secrets.reload();
             // A new or changed key is checked straight away, when the
             // command it needs is here.
@@ -148,6 +167,8 @@ function AccountRow({account, focused, checking, result, missingCLI, onCheck, on
   const checked = account.public?.verified;
   // The last check here failed: say so, whatever an earlier one found.
   const failed = !checking && !!result?.error;
+  // What the key cannot do yet: from a check just made, or the one recorded.
+  const note = result ? result.note : account.public?.check_note;
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (focused) ref.current?.scrollIntoView?.({block: 'nearest'});
@@ -164,15 +185,19 @@ function AccountRow({account, focused, checking, result, missingCLI, onCheck, on
           </div>
         )}
         {result?.error && <p className="notice bad" role="alert">{result.error}</p>}
-        {result?.note && <p className="notice warn" role="status">{result.note}</p>}
+        {!failed && note && <p className="notice warn" role="status">{note}</p>}
         <div className="row-actions">
-          <button className="btn" disabled={checking || missingCLI} onClick={onCheck}>{checking ? <span className="spinner" /> : null}Check</button>
-          <button className="btn" onClick={onEdit}>Replace or change</button>
+          <button className="btn" aria-label={`Check ${account.name}`} disabled={checking || missingCLI} onClick={onCheck}>{checking ? <span className="spinner" /> : null}Check</button>
+          <button className="btn" aria-label={`Replace or change ${account.name}`} onClick={onEdit}>Replace or change</button>
           <RemoveButton secret={account} />
         </div>
       </div>
       <div className="account-state">
-        <StatusTag status={failed ? 'failed' : checked ? 'ok' : 'idle'} label={failed ? 'Check failed' : checked ? 'Checked' : 'Not checked'} />
+        {!failed && checked && note ? (
+          <span className="tag warn"><span className="dot attention" aria-hidden="true" />Needs setup</span>
+        ) : (
+          <StatusTag status={failed ? 'failed' : checked ? 'ok' : 'idle'} label={failed ? 'Check failed' : checked ? 'Checked' : 'Not checked'} />
+        )}
         {checked && !failed && <span className="faint" title={checked}>{relativeTime(checked)}</span>}
         {account.hint && <span className="mono faint">{account.hint}</span>}
         <AgentToggle secret={account} />

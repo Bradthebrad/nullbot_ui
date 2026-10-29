@@ -115,7 +115,7 @@ describe('Cloud accounts', () => {
     });
     render(<><CloudAccounts /><DialogHost /></>);
     const aws = (await screen.findByText('aws-test')).closest('.account') as HTMLElement;
-    fireEvent.click(within(aws).getByRole('button', {name: 'Check'}));
+    fireEvent.click(within(aws).getByRole('button', {name: 'Check aws-test'}));
     expect((await within(aws).findByRole('alert')).textContent).toMatch(/does not recognize this access key ID/);
     // Whatever an earlier check found, this one failed.
     expect(within(aws).getByText('Check failed')).toBeTruthy();
@@ -123,8 +123,40 @@ describe('Cloud accounts', () => {
 
     bridge.set('CheckCloudAccount', (name: string) => ({name, cloud: 'gcp', note: 'The key signs in, but the Compute Engine API is off in project acme-lab.'}));
     const gcp = screen.getByText('gcp-lab').closest('.account') as HTMLElement;
-    fireEvent.click(within(gcp).getByRole('button', {name: 'Check'}));
+    fireEvent.click(within(gcp).getByRole('button', {name: 'Check gcp-lab'}));
     expect((await within(gcp).findByRole('status')).textContent).toMatch(/Compute Engine API is off/);
+  });
+
+  it('keeps what a check found with the account, and says it needs setup', async () => {
+    secrets = [awsChecked, {...gcpNew, public: {...gcpNew.public, verified: new Date().toISOString(), check_note: 'The key signs in, but it cannot use Compute Engine in project acme-lab.'}}];
+    render(<><CloudAccounts /><DialogHost /></>);
+    const gcp = (await screen.findByText('gcp-lab')).closest('.account') as HTMLElement;
+    expect(within(gcp).getByText('Needs setup')).toBeTruthy();
+    expect(within(gcp).getByRole('status').textContent).toMatch(/cannot use Compute Engine/);
+    // A clean check replaces it.
+    bridge.set('CheckCloudAccount', (name: string) => ({name, cloud: 'gcp', identity: gcpNew.public.client_email}));
+    fireEvent.click(within(gcp).getByRole('button', {name: 'Check gcp-lab'}));
+    await waitFor(() => expect(within(gcp).queryByRole('status')).toBeNull());
+  });
+
+  it('lets only the latest check of an account report', async () => {
+    const pending: ((value: unknown) => void)[] = [];
+    bridge.set('CheckCloudAccount', () => new Promise(resolve => pending.push(resolve)));
+    render(<><CloudAccounts /><DialogHost /></>);
+    const aws = (await screen.findByText('aws-test')).closest('.account') as HTMLElement;
+    fireEvent.click(within(aws).getByRole('button', {name: 'Check aws-test'}));
+    // Replacing the key checks it again while the first check runs.
+    fireEvent.click(within(aws).getByRole('button', {name: 'Replace or change aws-test'}));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', {name: 'Save'}));
+    await waitFor(() => expect(pending).toHaveLength(2));
+    // The first answers late: nothing changes.
+    pending[0]({name: 'aws-test', cloud: 'aws', note: 'stale'});
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(within(aws).queryByText('stale')).toBeNull();
+    expect((within(aws).getByRole('button', {name: 'Check aws-test'}) as HTMLButtonElement).disabled).toBe(true);
+    pending[1]({name: 'aws-test', cloud: 'aws', account: '123456789012', identity: awsChecked.public.identity});
+    await waitFor(() => expect((within(aws).getByRole('button', {name: 'Check aws-test'}) as HTMLButtonElement).disabled).toBe(false));
   });
 
   it('says when the cloud’s command is missing, and does not offer a check that cannot run', async () => {
@@ -132,7 +164,7 @@ describe('Cloud accounts', () => {
     render(<><CloudAccounts /><DialogHost /></>);
     const aws = (await screen.findByText('aws-test')).closest('.account') as HTMLElement;
     expect(await within(aws).findByText(/isn’t installed here/)).toBeTruthy();
-    expect((within(aws).getByRole('button', {name: 'Check'}) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(aws).getByRole('button', {name: 'Check aws-test'}) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(within(aws).getByRole('button', {name: /Get the AWS CLI/}));
     await waitFor(() => expect(bridge.callsTo('OpenExternal')).toEqual([['https://aws.amazon.com/cli/']]));
   });

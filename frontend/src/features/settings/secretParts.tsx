@@ -66,7 +66,7 @@ export function RemoveButton({secret, small}: {secret: SecretInfo; small?: boole
       toastError(err);
     }
   }
-  return <button className={small ? 'btn btn-sm' : 'btn'} onClick={() => void remove()}>Remove</button>;
+  return <button className={small ? 'btn btn-sm' : 'btn'} aria-label={`Remove ${secret.name}`} onClick={() => void remove()}>Remove</button>;
 }
 
 /** Key files are small; anything larger is not one. */
