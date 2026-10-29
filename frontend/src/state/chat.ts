@@ -6,7 +6,7 @@ import {createStore, type Store} from '../lib/store';
 import {api} from '../lib/bindings';
 import type {ActivityRecord, ChatMessage, Reply, SubmissionSnapshot} from '../lib/types';
 import {applyActivity, emptyActivity, type ActivityState} from '../features/activity/model';
-import {ingestChatStream, localMessage, messageWithAttachmentTokens, reconcileChatHistory, settleChatStreams} from '../features/chat/transcript';
+import {ingestChatStream, localMessage, messageWithAttachmentTokens, reconcileChatHistory, settleChatStreams} from '../features/chat/chatMessages';
 import {makeChatRequest, submitChatRequest, type ChatMode} from '../chatSubmission';
 import type {StagedAttachment} from '../attachments';
 import {appStore, openSettings, refreshState, setView} from './app';

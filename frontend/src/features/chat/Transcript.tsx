@@ -10,7 +10,7 @@ import {appStore, openSettings, setView} from '../../state/app';
 import {Markdown} from '../../ui/Markdown';
 import AttachmentTray from '../../AttachmentTray';
 import {formatDuration, formatTime, permissionLabel, shorten} from '../../lib/format';
-import {followTranscript, isTranscriptNearBottom, messageWithVisibleAttachments, rememberSummaryOpen} from './transcript';
+import {followTranscript, isTranscriptNearBottom, messageWithVisibleAttachments, rememberSummaryOpen} from './chatMessages';
 import {describeStep} from '../activity/describe';
 import {runningStep, type Turn} from '../activity/model';
 import type {ChatMessage} from '../../lib/types';

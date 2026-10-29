@@ -1,6 +1,6 @@
 // Streaming and history reconciliation for the conversation.
 import {describe, expect, it} from 'vitest';
-import {identifyChatMessages, ingestChatStream, isTranscriptNearBottom, reconcileChatHistory} from './transcript';
+import {identifyChatMessages, ingestChatStream, isTranscriptNearBottom, reconcileChatHistory} from './chatMessages';
 
 const base = {agent_id: 'main', run_id: 'run', submission_id: 'submission'};
 function stream(steps: [string, string][], extra = {}) {

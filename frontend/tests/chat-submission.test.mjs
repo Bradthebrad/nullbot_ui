@@ -51,4 +51,4 @@ test('busy dialog focuses Keep editing, restores composer focus, and exposes all
 });
 
 // Streaming, reconciliation and Also correlation moved with the code into
-// src/features/chat/transcript.test.ts and src/state/chat.test.ts (vitest).
+// src/features/chat/chatMessages.test.ts and src/state/chat.test.ts (vitest).
