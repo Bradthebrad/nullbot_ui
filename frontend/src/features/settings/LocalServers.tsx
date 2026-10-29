@@ -4,7 +4,7 @@
 import {useEffect, useState} from 'react';
 import {api} from '../../lib/bindings';
 import {onModelPull} from '../../lib/events';
-import {formatTokens} from '../../lib/format';
+import {formatWindow as formatTokens} from '../../lib/format';
 import type {LocalEndpoint, LocalEndpointInfo, LocalModel, LocalServerFound, LocalServerKind, ModelPullEvent, SecretInfo} from '../../lib/types';
 import {appStore, refreshState} from '../../state/app';
 import {StatusTag} from '../../ui/layout';

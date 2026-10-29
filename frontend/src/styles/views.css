@@ -587,3 +587,4 @@ mark { padding: 0 1px; border-radius: 2px; background: var(--signal-soft); color
 .install-suggested { display: grid; gap: 10px; }
 .install-table th, .install-table td { white-space: nowrap; }
 .install-table td.mono { white-space: normal; word-break: break-word; }
+.install-search .select { flex: 0 0 auto; width: auto; }

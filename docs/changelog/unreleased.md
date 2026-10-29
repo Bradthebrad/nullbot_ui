@@ -1,5 +1,17 @@
 # Unreleased
 
+## Local models
+
+- **Settings > Models > Model servers**: add Ollama, llama.cpp, LM Studio,
+  vLLM or any OpenAI-compatible server, here or on another machine, or find
+  the ones running here. Each shows whether it answers, its chat models
+  with their real context, and a warning when that is too small; Ollama
+  models can be pulled (with progress and cancel), deleted, or copied with
+  a larger context.
+- **Install a model**: the models that run well on this computer, ranked by
+  llmfit, and a Hugging Face search for GGUF builds, installed into Ollama,
+  LM Studio's folder or NullBot's models folder.
+
 ## Claude CLI models
 
 - **Claude subscription models** (CLI default, Opus, Sonnet, Haiku) in the

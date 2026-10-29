@@ -169,3 +169,9 @@ export function formatTokens(n: number): string {
   }
   return `${(n / 1_000_000).toFixed(2).replace(/\.?0+$/, '')}M`;
 }
+
+/** A context window size: 32768 is "32k", as servers and model cards say. */
+export function formatWindow(n: number): string {
+  if (Number.isFinite(n) && n >= 1024 && n % 1024 === 0) return `${n / 1024}k`;
+  return formatTokens(n);
+}

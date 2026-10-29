@@ -42,7 +42,7 @@ describe('model servers', () => {
     expect(within(server).getByText('qwen2.5:7b')).toBeTruthy();
     expect(within(server).queryByText('nomic-embed-text:latest')).toBeNull();
     expect(within(server).getByText(/NullBot’s instructions and tools need about 16k/)).toBeTruthy();
-    fireEvent.click(within(server).getByRole('button', {name: /Make a 33k copy|Make a 32k copy/}));
+    fireEvent.click(within(server).getByRole('button', {name: /Make a 32k copy/}));
     await waitFor(() => expect(bridge.callsTo('CopyLocalModelWithContext')).toEqual([['ollama', 'qwen2.5:7b', 32768]]));
   });
 

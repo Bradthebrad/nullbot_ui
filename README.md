@@ -218,6 +218,24 @@ any past conversation.
 
 <img alt="History: a search for OPS-2219 export, matching inside a tool call's result" src="docs/images/history-search.png">
 
+## Local models
+
+**Settings > Models > Model servers** connects models you run yourself:
+Ollama, llama.cpp, LM Studio, vLLM or any OpenAI-compatible server, on this
+computer or another machine. NullBot finds the servers running here, shows
+each model's real context (and warns when it is too small for an agent),
+pulls Ollama models with live progress, and makes a larger-context copy in
+one click.
+
+<img alt="Model servers: an Ollama server with two chat models, one with a 4k context and a button to make a 32k copy, and a vLLM server on another machine with a warning about its key going over plain http" src="docs/images/model-servers.png">
+
+**Install a model** ranks the models that run well on this computer's CPU,
+memory and GPU (a Go port of [llmfit](https://github.com/AlexsJones/llmfit)),
+and searches Hugging Face for GGUF builds to install into Ollama, LM Studio
+or a folder for llama.cpp.
+
+<img alt="Install a model: this computer's CPU, RAM and GPU, and the models that run well on it with their quantization, fit, where they run and estimated speed, each with a button to pull it into Ollama" src="docs/images/install-models.png">
+
 ## Accounts
 
 **Settings > Accounts** holds API keys, the ChatGPT subscription sign-in,
