@@ -10,7 +10,7 @@ import {CopyButton, Markdown} from '../../ui/Markdown';
 import {describeStep, hostOf, resultLinks, stepSource} from './describe';
 import {stepDuration, type Step, type Turn} from './model';
 import {StepIcon} from './StepIcon';
-import {isTranscriptNearBottom} from '../chat/transcript';
+import {isTranscriptNearBottom} from '../chat/chatMessages';
 
 /** The inspector's flight-recorder view of what the agent is doing. */
 export function ActivityTrace() {
