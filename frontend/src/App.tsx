@@ -1,7 +1,7 @@
 import {useEffect} from 'react';
 import {useStore} from './lib/store';
 import {api} from './lib/bindings';
-import {onActivity, onChanged, onChats, onMCP, onReply, onStatus, onSubmissions, onVisuals} from './lib/events';
+import {onActivity, onChanged, onChats, onInfraRun, onMCP, onReply, onStatus, onSubmissions, onVisuals} from './lib/events';
 import {installLinkInterceptor} from './lib/links';
 import {appStore, applyUIState, bumpVersion, openFile, refreshState, setView, toggleInspector} from './state/app';
 import {bootstrapChat, handleReply, handleSubmissions, queueActivity} from './state/chat';
@@ -19,11 +19,13 @@ import {VisualsView} from './features/visuals/VisualsView';
 import {VisualWindow} from './features/visuals/VisualWindow';
 import {bootstrapVisuals, handleLiveVisuals} from './state/visuals';
 import {SettingsView} from './features/settings/SettingsView';
+import {CloudView} from './features/cloud/CloudView';
+import {refreshInfraWaiting} from './state/infra';
 import {DialogHost} from './ui/dialogs';
 import {ErrorBoundary} from './ui/ErrorBoundary';
 import {ToastHost, toast, toastError} from './ui/toast';
 
-const viewNames = {chat: 'The conversation', activity: 'Activity', files: 'Files', visuals: 'Visuals', tools: 'Tools', history: 'History', settings: 'Settings'} as const;
+const viewNames = {chat: 'The conversation', activity: 'Activity', files: 'Files', visuals: 'Visuals', tools: 'Tools', history: 'History', cloud: 'Cloud', settings: 'Settings'} as const;
 
 export default function App() {
   const ready = useStore(appStore, state => state.ready);
@@ -40,12 +42,14 @@ export default function App() {
         appStore.set({ready: true});
         api.chats().then(list => setChats(list || [])).catch(() => setChats([]));
         void bootstrapVisuals();
+        void refreshInfraWaiting();
         if (!ui.models_fresh) api.modelCatalog(false).then(models => appStore.set({models})).catch(() => undefined);
       })
       .catch(err => appStore.set({ready: true, error: String(err instanceof Error ? err.message : err)}));
 
     let configTimer = 0;
     let mcpTimer = 0;
+    let infraTimer = 0;
     const offs = [
       onActivity(queueActivity),
       onReply(handleReply),
@@ -66,7 +70,14 @@ export default function App() {
         if (topic === 'config') {
           window.clearTimeout(configTimer);
           configTimer = window.setTimeout(() => void refreshState().catch(() => undefined), 150);
+        } else if (topic === 'infra') {
+          window.clearTimeout(infraTimer);
+          infraTimer = window.setTimeout(() => void refreshInfraWaiting(), 200);
         }
+      }),
+      onInfraRun(run => {
+        if (run.error) toast(`${run.title || 'The cloud plan'} stopped: ${run.error}`, 'error');
+        else toast(`${run.title || 'The cloud plan'}: done.`, 'success');
       }),
       onStatus(({message}) => toast(message, 'error')),
       installLinkInterceptor({
@@ -89,7 +100,7 @@ export default function App() {
       } else if (key === ',') {
         event.preventDefault();
         setView('settings');
-      } else if (/^[1-6]$/.test(key)) {
+      } else if (/^[1-7]$/.test(key)) {
         event.preventDefault();
         setView(railViews[Number(key) - 1]);
       } else if (key === 't' && !event.shiftKey) {
@@ -113,6 +124,7 @@ export default function App() {
       disposed = true;
       window.clearTimeout(configTimer);
       window.clearTimeout(mcpTimer);
+      window.clearTimeout(infraTimer);
       offs.forEach(off => off());
       window.removeEventListener('keydown', onKey);
     };
@@ -143,6 +155,7 @@ export default function App() {
                   {view === 'visuals' && <VisualsView />}
                   {view === 'tools' && <ToolsView />}
                   {view === 'history' && <HistoryView />}
+                  {view === 'cloud' && <CloudView />}
                   {view === 'settings' && <SettingsView />}
                 </ErrorBoundary>
               )}

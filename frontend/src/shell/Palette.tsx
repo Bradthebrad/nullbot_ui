@@ -32,6 +32,7 @@ function useCommands(): Command[] {
       {id: 'go-visuals', group: 'Go to', title: 'Visuals: charts, pictures, pages and polls NullBot showed you', keywords: 'visualizations visualize poll chart diagram', hint: 'Ctrl+4', run: go('visuals')},
       {id: 'go-tools', group: 'Go to', title: 'Tools: servers, skills and marketplace', hint: 'Ctrl+5', run: go('tools')},
       {id: 'go-history', group: 'Go to', title: 'History', hint: 'Ctrl+6', run: go('history')},
+      {id: 'go-cloud', group: 'Go to', title: 'Cloud', hint: 'Ctrl+7', run: go('cloud')},
       {id: 'go-projects', group: 'Settings', title: 'Projects and permissions', keywords: 'folders access workspace', run: section('projects')},
       {id: 'go-models', group: 'Settings', title: 'Models', keywords: 'provider openai anthropic codex', run: section('models')},
       {id: 'go-accounts', group: 'Settings', title: 'Accounts and API keys', keywords: 'keys credentials gmail', run: section('accounts')},

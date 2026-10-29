@@ -593,3 +593,55 @@ export function MachineHardware(arg1) {
 export function SuggestModels(arg1) {
   return window['go']['main']['App']['SuggestModels'](arg1);
 }
+
+export function InfraState() {
+  return window['go']['main']['App']['InfraState']();
+}
+
+export function DecideInfraPlan(arg1,arg2,arg3,arg4) {
+  return window['go']['main']['App']['DecideInfraPlan'](arg1,arg2,arg3,arg4);
+}
+
+export function RunInfraPlan(arg1) {
+  return window['go']['main']['App']['RunInfraPlan'](arg1);
+}
+
+export function StopInfraPlan(arg1) {
+  return window['go']['main']['App']['StopInfraPlan'](arg1);
+}
+
+export function PlanInfraDestroy(arg1,arg2,arg3) {
+  return window['go']['main']['App']['PlanInfraDestroy'](arg1,arg2,arg3);
+}
+
+export function InfraLedger(arg1,arg2) {
+  return window['go']['main']['App']['InfraLedger'](arg1,arg2);
+}
+
+export function SetInfraAgentTools(arg1) {
+  return window['go']['main']['App']['SetInfraAgentTools'](arg1);
+}
+
+export function InspectNode(arg1) {
+  return window['go']['main']['App']['InspectNode'](arg1);
+}
+
+export function ThisComputer() {
+  return window['go']['main']['App']['ThisComputer']();
+}
+
+export function OpenTunnel(arg1,arg2,arg3) {
+  return window['go']['main']['App']['OpenTunnel'](arg1,arg2,arg3);
+}
+
+export function Tunnels() {
+  return window['go']['main']['App']['Tunnels']();
+}
+
+export function CloseTunnel(arg1) {
+  return window['go']['main']['App']['CloseTunnel'](arg1);
+}
+
+export function ConnectNodeOllama(arg1) {
+  return window['go']['main']['App']['ConnectNodeOllama'](arg1);
+}

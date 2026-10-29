@@ -1,5 +1,25 @@
 # Unreleased
 
+## Cloud
+
+- **Cloud** in the rail: machines and buckets NullBot made on AWS and
+  Google Cloud, what they cost per hour, and the plans that made them. A
+  dot on the rail says when a plan is waiting for you, and an agent's
+  proposal is announced.
+- **Approving a plan**: why it was asked for, what it makes, its cost, and
+  every command numbered in the order it runs, quoted as a shell needs it,
+  with values from earlier steps named. A first-boot script someone wrote
+  is open for reading. **Approve and run** or **Reject** sit under the
+  commands, and approving covers exactly the plan on screen; a removal asks
+  first. Agents can propose plans (when allowed) but never approve them.
+- **Machines**: address, who can reach which port, first-boot setup, cost,
+  and what runs there, read over SSH; open a tunnel to a port, or use the
+  machine's Ollama as a model server here. Removing anything proposes a
+  plan.
+- **This computer** lists what listens on which port and whether other
+  computers can reach it; the **Ledger** lists every proposal, decision and
+  command.
+
 ## Local models
 
 - **Settings > Models > Model servers**: add Ollama, llama.cpp, LM Studio,

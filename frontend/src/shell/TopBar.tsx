@@ -18,6 +18,7 @@ const titles: Record<View, string> = {
   visuals: 'Visuals',
   tools: 'Tools',
   history: 'History',
+  cloud: 'Cloud',
   settings: 'Settings',
 };
 

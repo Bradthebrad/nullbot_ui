@@ -1,10 +1,11 @@
-import {Activity, Blocks, Folder, History, MessageSquare, Settings, Shapes} from 'lucide-react';
+import {Activity, Blocks, Cloud, Folder, History, MessageSquare, Settings, Shapes} from 'lucide-react';
 import {useStore} from '../lib/store';
 import {appStore, setView, type View} from '../state/app';
 import {chatsStore} from '../state/chats';
 import {useFocusedChatState} from '../features/chat/ChatContext';
 import {isBusy} from '../state/chat';
 import {visualStore} from '../state/visuals';
+import {infraStore} from '../state/infra';
 
 const items: {id: View; label: string; icon: typeof Activity; key: string; title?: string}[] = [
   {id: 'chat', label: 'Chat', icon: MessageSquare, key: '1'},
@@ -13,6 +14,7 @@ const items: {id: View; label: string; icon: typeof Activity; key: string; title
   {id: 'visuals', label: 'Visuals', icon: Shapes, key: '4', title: 'Visualizations'},
   {id: 'tools', label: 'Tools', icon: Blocks, key: '5'},
   {id: 'history', label: 'History', icon: History, key: '6'},
+  {id: 'cloud', label: 'Cloud', icon: Cloud, key: '7', title: 'Cloud machines and storage'},
 ];
 
 export const railViews = [...items.map(item => item.id), 'settings' as View];
@@ -25,15 +27,16 @@ export function Rail() {
   const busy = focusedBusy || othersBusy;
   const failing = useStore(appStore, state => state.mcp.some(s => s.enabled && s.state === 'error'));
   const waiting = useStore(visualStore, state => state.live.some(v => v.waiting));
+  const plansWaiting = useStore(infraStore, state => state.waiting.length);
   return (
     <nav className="rail" aria-label="Main">
       <div className="rail-mark" title={botName} aria-hidden="true">{botName.slice(0, 1).toUpperCase()}</div>
       <div className="rail-items">
         {items.map(item => {
           const Icon = item.icon;
-          const badge = item.id === 'activity' && busy ? 'live' : item.id === 'tools' && failing ? 'bad' : item.id === 'visuals' && waiting ? 'live' : '';
+          const badge = item.id === 'activity' && busy ? 'live' : item.id === 'tools' && failing ? 'bad' : item.id === 'visuals' && waiting ? 'live' : item.id === 'cloud' && plansWaiting ? 'live' : '';
           return (
-            <button key={item.id} className={view === item.id ? 'rail-item active' : 'rail-item'} aria-current={view === item.id ? 'page' : undefined} title={`${item.title || item.label} (Ctrl+${item.key})`} onClick={() => setView(item.id)}>
+            <button key={item.id} className={view === item.id ? 'rail-item active' : 'rail-item'} aria-current={view === item.id ? 'page' : undefined} title={`${item.title || item.label}${item.id === 'cloud' && plansWaiting ? `, ${plansWaiting} plan${plansWaiting === 1 ? '' : 's'} waiting for you` : ''} (Ctrl+${item.key})`} onClick={() => setView(item.id)}>
               <span className="rail-icon">
                 <Icon size={18} strokeWidth={1.75} />
                 {badge && <span className={`rail-badge dot ${badge}`} />}

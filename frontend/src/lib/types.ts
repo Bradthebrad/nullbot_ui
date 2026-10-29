@@ -333,3 +333,38 @@ export type ChatInfo = {
   subagents?: {id: string; name?: string; role?: string; status: string; current?: string}[];
   history_id: string; created: string; updated: string;
 };
+
+// --- cloud infrastructure ---------------------------------------------------
+
+export type InfraResource = {
+  id: string; cloud: 'aws' | 'gcp'; kind: 'instance' | 'bucket' | 'security_group' | 'key_pair' | 'firewall' | string;
+  name: string; region?: string; zone?: string; project?: string; cloud_id?: string;
+  state: 'planned' | 'creating' | 'ready' | 'failed' | 'deleting' | 'deleted' | 'missing' | string;
+  plan_id: string; credential: string; created: string; updated: string;
+  details?: Record<string, string>; cost_hourly?: number; depends_on?: string[];
+};
+export type InfraStep = {
+  id: string; summary: string; argv: string[]; resource?: string; action: string; input?: string; parse?: string;
+  ignore_missing?: boolean; state?: 'pending' | 'running' | 'done' | 'failed' | 'skipped' | string; error?: string; output?: string; ran?: string;
+};
+export type InfraPlan = {
+  id: string; title: string; cloud: 'aws' | 'gcp'; credential: string; region?: string; project?: string; kind: 'create' | 'destroy';
+  steps: InfraStep[]; resources: InfraResource[]; cost_hourly?: number; cost_note?: string; notes?: string[];
+  state: 'proposed' | 'approved' | 'applying' | 'applied' | 'failed' | 'rejected'; reason?: string; requester?: string;
+  created: string; decided?: string; decided_by?: string; finished?: string; error?: string;
+  /** What the plan does, hashed as it was read: approving sends it back, so only what was shown is approved. */
+  hash?: string;
+};
+export type InfraState = {agent_tools: boolean; plans: InfraPlan[] | null; resources: InfraResource[] | null; cost_hourly: number; tools: Record<string, string>};
+export type InfraLedgerEntry = {
+  time: string; plan: string; event: string; step?: string; summary?: string; argv?: string[]; exit?: number;
+  output?: string; error?: string; resource?: string; by?: string;
+};
+export type Listener = {address: string; port: number; process?: string; pid?: number; known?: string; public: boolean};
+export type NginxSite = {server_names?: string[]; listen?: string[]; proxy_pass?: string[]; root?: string};
+export type NodeReport = {
+  resource?: string; name: string; address?: string; read: string; listeners: Listener[] | null; services?: string[];
+  nginx?: NginxSite[]; containers?: string[]; setup?: string; setup_lines?: string[]; system?: string[]; error?: string;
+};
+export type Tunnel = {id: string; resource: string; name: string; local_port: number; remote_port: number; started: string; error?: string};
+export type InfraRunEvent = {plan: string; title: string; state: string; error?: string};
