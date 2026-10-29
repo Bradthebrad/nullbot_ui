@@ -228,3 +228,25 @@ func (a *App) CancelInstall(id string) {
 		cancel()
 	}
 }
+
+// MachineHardware reports this computer's CPU, memory and GPUs, with a
+// one-line summary.
+func (a *App) MachineHardware(refresh bool) (map[string]any, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+	defer cancel()
+	hw, err := nullbot.MachineHardware(ctx, refresh)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"hardware": hw, "summary": nullbot.MachineSummary(hw)}, nil
+}
+
+// SuggestModels ranks the models that run well on this computer.
+func (a *App) SuggestModels(opts nullbot.ModelFitOptions) (nullbot.ModelFits, error) {
+	if err := a.ready(); err != nil {
+		return nullbot.ModelFits{}, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+	defer cancel()
+	return a.bot.SuggestModels(ctx, opts)
+}

@@ -152,6 +152,15 @@ export type InstallTarget = 'ollama' | 'lmstudio' | 'files';
 export type InstallRequest = {repo: string; build?: string; quant?: string; target: InstallTarget; server?: string};
 export type InstallResult = {target: InstallTarget; model: string; paths?: string[]; next?: string};
 export type ModelInstallEvent = {id: string; repo: string; status: string; file?: string; done?: number; total?: number; ended?: boolean; error?: string; result?: InstallResult};
+export type Hardware = {os: string; arch: string; cpu_name: string; cpu_cores: number; total_ram_gb: number; available_ram_gb: number; gpus?: {name: string; vram_gb: number; count: number; backend: string; unified_memory?: boolean}[]; backend: string; unified_memory?: boolean};
+export type ModelFit = {
+  model: {name: string; provider: string; parameter_count: string; context_length: number; use_case: string; capabilities?: string[]; release_date?: string};
+  fit: 'perfect' | 'good' | 'marginal' | 'too_tight'; run_mode: string; runtime: string; quant: string;
+  memory_required_gb: number; memory_available_gb: number; utilization_pct: number; context_length: number; usable_context: number;
+  tokens_per_second: number; score: number; use_case: string; ollama_tag?: string; gguf_repo?: string; notes?: string[];
+};
+export type ModelFitOptions = {use_case?: string; context_length?: number; runtime?: string; limit?: number; refresh?: boolean; include_small?: boolean};
+export type ModelFits = {hardware: Hardware; options: ModelFitOptions; fits: ModelFit[]};
 export type ModelPullEvent = {server: string; model: string; status: string; completed?: number; total?: number; done?: boolean; error?: string};
 
 export type AgentTask = {

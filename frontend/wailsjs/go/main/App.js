@@ -585,3 +585,11 @@ export function InstallModel(arg1) {
 export function CancelInstall(arg1) {
   return window['go']['main']['App']['CancelInstall'](arg1);
 }
+
+export function MachineHardware(arg1) {
+  return window['go']['main']['App']['MachineHardware'](arg1);
+}
+
+export function SuggestModels(arg1) {
+  return window['go']['main']['App']['SuggestModels'](arg1);
+}

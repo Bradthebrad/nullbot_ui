@@ -5,7 +5,7 @@ import type {
   AgentTask, FileBrowser, FileSearchKind, FileSearchResult, HistoryEntry, HistoryQuery, HistorySearchResult, FilePreview, MCPServerStatus, MarketState, ModelGroup, Plan, ProjectsState, Project,
   Reply, ScheduledTask, SessionSummary, SkillFile, SubmissionSnapshot, UIState, UsageReport, Visualization, VisualDelivery, VisualEvent, VisualView,
   VaultInfo, SecretInfo, SecretKind, SecretInput, GitHubIdentity, ChatInfo,
-  LocalEndpoint, LocalEndpointInfo, LocalServerFound, LocalServerKind, HFModel, HFBuild, InstallRequest,
+  LocalEndpoint, LocalEndpointInfo, LocalServerFound, LocalServerKind, HFModel, HFBuild, InstallRequest, Hardware, ModelFitOptions, ModelFits,
 } from './types';
 
 const go = Go as unknown as Record<string, (...args: any[]) => Promise<any>>;
@@ -45,6 +45,8 @@ export const api = {
   hfBuilds: (repo: string) => call<HFBuild[]>('HFBuilds', repo),
   installModel: (request: InstallRequest) => call<string>('InstallModel', request),
   cancelInstall: (id: string) => call<void>('CancelInstall', id),
+  machineHardware: (refresh = false) => call<{hardware: Hardware; summary: string}>('MachineHardware', refresh),
+  suggestModels: (options: ModelFitOptions) => call<ModelFits>('SuggestModels', options),
   setAppearance: (appearance: string, accent: string) => call<UIState>('SetAppearance', appearance, accent),
   setBotName: (name: string) => call<UIState>('SetBotName', name),
   savePrompts: (prompts: any) => call<UIState>('SavePrompts', prompts),

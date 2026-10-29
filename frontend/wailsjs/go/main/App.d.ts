@@ -294,3 +294,7 @@ export function HFBuilds(arg1:any):Promise<any>;
 export function InstallModel(arg1:any):Promise<string>;
 
 export function CancelInstall(arg1:any):Promise<void>;
+
+export function MachineHardware(arg1:any):Promise<any>;
+
+export function SuggestModels(arg1:any):Promise<any>;

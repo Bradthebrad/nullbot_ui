@@ -4,7 +4,7 @@ import {useEffect, useState, type ReactNode} from 'react';
 import {api} from '../../lib/bindings';
 import {onModelInstall} from '../../lib/events';
 import {formatBytes} from '../../lib/format';
-import type {HFBuild, HFModel, InstallTarget, LocalEndpointInfo, ModelInstallEvent} from '../../lib/types';
+import type {HFBuild, HFModel, InstallTarget, LocalEndpointInfo, ModelFit, ModelFits, ModelInstallEvent} from '../../lib/types';
 import {appStore, refreshState} from '../../state/app';
 import {toast, toastError} from '../../ui/toast';
 import {Group} from './form';
@@ -31,6 +31,7 @@ function useTargets() {
 }
 
 export function ModelInstall({children}: {children?: ReactNode}) {
+  const [tab, setTab] = useState<'suggested' | 'search'>('suggested');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState('downloads');
   const [results, setResults] = useState<HFModel[] | null>(null);
@@ -67,15 +68,23 @@ export function ModelInstall({children}: {children?: ReactNode}) {
   const finished = Object.values(installs).filter(i => i.ended && i.result);
 
   return (
-    <Group title="Install a model" note="Find a GGUF build on Hugging Face and install it into Ollama, LM Studio, or NullBot’s models folder for llama.cpp. Downloads resume and are checked against the published checksum.">
+    <Group title="Install a model" note="See which models run well on this computer, or find a GGUF build on Hugging Face, and install it into Ollama, LM Studio, or NullBot’s models folder for llama.cpp. Downloads resume and are checked against the published checksum.">
       {children}
-      <form className="install-search" role="search" onSubmit={event => void search(event)}>
+      <div className="segmented install-tabs" role="tablist" aria-label="Find a model">
+        <button type="button" role="tab" aria-selected={tab === 'suggested'} className={tab === 'suggested' ? 'active' : ''} onClick={() => setTab('suggested')}>Suggested for this computer</button>
+        <button type="button" role="tab" aria-selected={tab === 'search'} className={tab === 'search' ? 'active' : ''} onClick={() => setTab('search')}>Search Hugging Face</button>
+      </div>
+      {tab === 'suggested' && <Suggested onOpenRepo={id => {
+        setRepo({id, downloads: 0, likes: 0});
+        setTab('search');
+      }} />}
+      {tab === 'search' && <form className="install-search" role="search" onSubmit={event => void search(event)}>
         <input className="input" type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search Hugging Face, such as qwen2.5 7b instruct" aria-label="Search Hugging Face" />
         <select className="select" value={sort} onChange={e => setSort(e.target.value)} aria-label="Order">
           {sorts.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
         </select>
         <button type="submit" className="btn" disabled={searching}>{searching ? 'Searching…' : 'Search'}</button>
-      </form>
+      </form>}
 
       {running.map(i => (
         <div key={i.id} className="local-pull" aria-label={`Installing from ${i.repo}`}>
@@ -86,8 +95,8 @@ export function ModelInstall({children}: {children?: ReactNode}) {
       ))}
       {finished.map(i => i.result?.next ? <p key={i.id} className="notice">{i.repo}: {i.result.next}</p> : null)}
 
-      {results && results.length === 0 && <p className="muted">No GGUF models match. Try fewer words, or the model’s family name.</p>}
-      {results && results.length > 0 && !repo && (
+      {tab === 'search' && results && results.length === 0 && <p className="muted">No GGUF models match. Try fewer words, or the model’s family name.</p>}
+      {tab === 'search' && results && results.length > 0 && !repo && (
         <ul className="install-results">
           {results.map(m => (
             <li key={m.id}>
@@ -98,7 +107,7 @@ export function ModelInstall({children}: {children?: ReactNode}) {
           ))}
         </ul>
       )}
-      {repo && <Builds model={repo} onBack={() => setRepo(null)} />}
+      {tab === 'search' && repo && <Builds model={repo} onBack={() => setRepo(null)} />}
     </Group>
   );
 }
@@ -156,6 +165,102 @@ function Builds({model, onBack}: {model: HFModel; onBack: () => void}) {
           </table>
         </>
       )}
+    </div>
+  );
+}
+
+const useCases = [
+  {id: '', label: 'Any task'},
+  {id: 'general', label: 'General'},
+  {id: 'coding', label: 'Coding'},
+  {id: 'reasoning', label: 'Reasoning'},
+  {id: 'chat', label: 'Chat'},
+  {id: 'multimodal', label: 'Images and text'},
+];
+const contexts = [8192, 16384, 32768, 65536];
+const fitLabel: Record<string, string> = {perfect: 'Runs easily', good: 'Runs well', marginal: 'Tight fit', too_tight: 'Doesn’t fit'};
+const runLabel: Record<string, string> = {gpu: 'GPU', moe_offload: 'GPU + RAM (experts)', cpu_offload: 'GPU + RAM', cpu_only: 'CPU'};
+
+/** The models that run well on this computer, ranked by llmfit. */
+function Suggested({onOpenRepo}: {onOpenRepo: (repo: string) => void}) {
+  const [useCase, setUseCase] = useState('');
+  const [contextLength, setContextLength] = useState(16384);
+  const [data, setData] = useState<ModelFits | null>(null);
+  const [summary, setSummary] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [ollama, setOllama] = useState<string>('');
+
+  async function load(refresh = false) {
+    setLoading(true);
+    setError('');
+    try {
+      const [fits, hw] = await Promise.all([api.suggestModels({use_case: useCase, context_length: contextLength, limit: 15, refresh}), api.machineHardware(false)]);
+      setData(fits);
+      setSummary(hw?.summary || '');
+    } catch (e) {
+      setError(String(e instanceof Error ? e.message : e));
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => {
+    void load();
+  }, [useCase, contextLength]);
+  useEffect(() => {
+    api.localEndpoints(false).then(list => setOllama((Array.isArray(list) ? list : []).find(s => s.kind === 'ollama' && !s.disabled)?.id || '')).catch(() => undefined);
+  }, []);
+
+  async function install(fit: ModelFit) {
+    if (fit.ollama_tag && ollama) {
+      try {
+        await api.pullLocalModel(ollama, fit.ollama_tag);
+        toast(`Pulling ${fit.ollama_tag} into Ollama. Progress shows under Model servers.`, 'success');
+      } catch (e) {
+        toastError(e);
+      }
+      return;
+    }
+    if (fit.gguf_repo) onOpenRepo(fit.gguf_repo);
+  }
+
+  const fits = Array.isArray(data?.fits) ? data!.fits : [];
+  return (
+    <div className="install-suggested">
+      <div className="install-search">
+        <span className="install-machine">{summary || 'Looking at this computer…'}</span>
+        <select className="select" value={useCase} onChange={e => setUseCase(e.target.value)} aria-label="Task">
+          {useCases.map(u => <option key={u.id} value={u.id}>{u.label}</option>)}
+        </select>
+        <select className="select" value={contextLength} onChange={e => setContextLength(Number(e.target.value))} aria-label="Context">
+          {contexts.map(c => <option key={c} value={c}>{c / 1024}k context{c === 16384 ? ' (what NullBot needs)' : ''}</option>)}
+        </select>
+        <button type="button" className="btn" disabled={loading} onClick={() => void load(true)}>{loading ? 'Checking…' : 'Check again'}</button>
+      </div>
+      {error && <p className="notice bad" role="alert">{error}</p>}
+      {data && fits.length === 0 && <p className="muted">No model in the catalog fits this computer at that context. Try a smaller context, or run models on another machine.</p>}
+      {fits.length > 0 && (
+        <table className="install-table" aria-label="Models that run well here">
+          <thead><tr><th>Model</th><th>Size</th><th>Quantization</th><th>Fit</th><th>Runs on</th><th className="num">Speed</th><th /></tr></thead>
+          <tbody>
+            {fits.map(f => (
+              <tr key={f.model.name}>
+                <td className="mono">{f.model.name}</td>
+                <td>{f.model.parameter_count}</td>
+                <td>{f.quant}</td>
+                <td><span className={`tag ${f.fit === 'perfect' || f.fit === 'good' ? 'ok' : 'warn'}`}>{fitLabel[f.fit] || f.fit}</span></td>
+                <td>{runLabel[f.run_mode] || f.run_mode}</td>
+                <td className="num">~{Math.round(f.tokens_per_second)} tok/s</td>
+                <td>
+                  {f.ollama_tag && ollama ? <button type="button" className="btn btn-sm" aria-label={`Install ${f.model.name}`} onClick={() => void install(f)}>Pull {f.ollama_tag}</button>
+                    : f.gguf_repo ? <button type="button" className="btn btn-sm" aria-label={`Install ${f.model.name}`} onClick={() => void install(f)}>Choose a build</button> : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <p className="faint">Ranked by <a href="https://github.com/AlexsJones/llmfit" target="_blank" rel="noreferrer">llmfit</a>’s estimates of fit, speed and quality. Speeds are estimates from your hardware’s memory bandwidth, not measurements.</p>
     </div>
   );
 }

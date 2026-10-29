@@ -582,3 +582,8 @@ mark { padding: 0 1px; border-radius: 2px; background: var(--signal-soft); color
 .install-table td { padding: 6px 8px 6px 0; border-bottom: 1px solid var(--line); vertical-align: middle; }
 .install-table .num { text-align: right; }
 .install-table .tag { margin-left: 6px; }
+.install-tabs { margin-bottom: 12px; }
+.install-machine { flex: 1 1 100%; color: var(--ink-2); font-size: var(--text-sm); }
+.install-suggested { display: grid; gap: 10px; }
+.install-table th, .install-table td { white-space: nowrap; }
+.install-table td.mono { white-space: normal; word-break: break-word; }

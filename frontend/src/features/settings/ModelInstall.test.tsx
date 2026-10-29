@@ -16,6 +16,12 @@ beforeEach(() => {
     ],
     LocalEndpoints: () => [{id: 'ollama', kind: 'ollama', title: 'Ollama', base_url: 'http://localhost:11434', status: {reachable: true}}],
     InstallModel: () => 'install-1',
+    MachineHardware: () => ({summary: 'Ryzen 9 7950X · 64 GB RAM · RTX 4090, 24 GB VRAM', hardware: {}}),
+    SuggestModels: (opts: any) => ({hardware: {}, options: opts, fits: [
+      {model: {name: 'Qwen/Qwen2.5-Coder-14B-Instruct', parameter_count: '14.8B'}, fit: 'good', run_mode: 'gpu', quant: 'Q5_K_M', tokens_per_second: 48.2, ollama_tag: 'qwen2.5-coder:14b', gguf_repo: 'Qwen/Qwen2.5-Coder-14B-Instruct-GGUF'},
+      {model: {name: 'mistralai/Devstral-Small-2505', parameter_count: '23.6B'}, fit: 'marginal', run_mode: 'cpu_offload', quant: 'Q4_K_M', tokens_per_second: 9.1, gguf_repo: 'unsloth/Devstral-Small-2505-GGUF'},
+    ]}),
+    PullLocalModel: () => undefined,
     ModelCatalog: () => [],
     State: () => ({config: {}}),
   });
@@ -24,6 +30,7 @@ beforeEach(() => {
 describe('installing a model', () => {
   it('searches, shows the builds and installs into Ollama with progress', async () => {
     render(<ModelInstall />);
+    fireEvent.click(screen.getByRole('tab', {name: 'Search Hugging Face'}));
     fireEvent.change(screen.getByRole('searchbox', {name: 'Search Hugging Face'}), {target: {value: 'qwen 7b'}});
     fireEvent.click(screen.getByRole('button', {name: 'Search'}));
     await waitFor(() => expect(bridge.callsTo('SearchHFModels')).toEqual([['qwen 7b', 'downloads', 20]]));
@@ -41,8 +48,24 @@ describe('installing a model', () => {
     await waitFor(() => expect(bridge.callsTo('CancelInstall')).toEqual([['install-1']]));
   });
 
+  it('suggests models for this computer and pulls one into Ollama', async () => {
+    render(<ModelInstall />);
+    expect(await screen.findByText('Ryzen 9 7950X · 64 GB RAM · RTX 4090, 24 GB VRAM')).toBeTruthy();
+    const table = await screen.findByRole('table', {name: 'Models that run well here'});
+    expect(within(table).getByText('Runs well')).toBeTruthy();
+    expect(within(table).getByText('GPU + RAM')).toBeTruthy();
+    fireEvent.change(screen.getByRole('combobox', {name: 'Task'}), {target: {value: 'coding'}});
+    await waitFor(() => expect(bridge.callsTo('SuggestModels').at(-1)![0]).toMatchObject({use_case: 'coding', context_length: 16384}));
+    fireEvent.click(await within(table).findByRole('button', {name: 'Install Qwen/Qwen2.5-Coder-14B-Instruct'}));
+    await waitFor(() => expect(bridge.callsTo('PullLocalModel')).toEqual([['ollama', 'qwen2.5-coder:14b']]));
+    // Without an Ollama tag, it opens the repo's builds.
+    fireEvent.click(within(table).getByRole('button', {name: 'Install mistralai/Devstral-Small-2505'}));
+    expect(await screen.findByLabelText('Builds of unsloth/Devstral-Small-2505-GGUF')).toBeTruthy();
+  });
+
   it('saves to a folder and says how to serve it', async () => {
     render(<ModelInstall />);
+    fireEvent.click(screen.getByRole('tab', {name: 'Search Hugging Face'}));
     fireEvent.click(screen.getByRole('button', {name: 'Search'}));
     fireEvent.click(await screen.findByRole('button', {name: 'Qwen/Qwen2.5-7B-Instruct-GGUF'}));
     const builds = await screen.findByLabelText('Builds of Qwen/Qwen2.5-7B-Instruct-GGUF');
