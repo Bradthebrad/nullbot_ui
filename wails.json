@@ -5,7 +5,7 @@
   "frontend:install": "npm ci",
   "info": {
     "productName": "NullBot UI",
-    "productVersion": "0.5.0",
+    "productVersion": "0.6.0",
     "companyName": "Bradthebrad",
     "comments": "NullBot desktop agent workspace"
   },
