@@ -4,6 +4,7 @@ import * as Go from '../../wailsjs/go/main/App';
 import type {
   AgentTask, FileBrowser, FileSearchKind, FileSearchResult, HistoryEntry, HistoryQuery, HistorySearchResult, FilePreview, MCPServerStatus, MarketState, ModelGroup, Plan, ProjectsState, Project,
   Reply, ScheduledTask, SessionSummary, SkillFile, SubmissionSnapshot, UIState, UsageReport, Visualization, VisualDelivery, VisualEvent, VisualView,
+  VaultInfo, SecretInfo, SecretKind, SecretInput, GitHubIdentity,
 } from './types';
 
 const go = Go as unknown as Record<string, (...args: any[]) => Promise<any>>;
@@ -111,6 +112,19 @@ export const api = {
   saveAccountKeys: (keys: any) => call<any>('SaveAccountKeys', keys),
   beginCodexLogin: () => call<any>('BeginCodexLogin'),
   pollCodexLogin: (flow: any) => call<any>('PollCodexLogin', flow),
+
+  vaultStatus: () => call<VaultInfo>('VaultStatus'),
+  createVault: (protection: string, passphrase: string) => call<VaultInfo>('CreateVault', protection, passphrase),
+  unlockVault: (passphrase: string) => call<VaultInfo>('UnlockVault', passphrase),
+  lockVault: () => call<VaultInfo>('LockVault'),
+  reprotectVault: (protection: string, passphrase: string) => call<VaultInfo>('ReprotectVault', protection, passphrase),
+  secrets: () => call<SecretInfo[]>('Secrets'),
+  secretKinds: () => call<SecretKind[]>('SecretKinds'),
+  saveSecret: (input: SecretInput) => call<SecretInfo>('SaveSecret', input),
+  removeSecret: (name: string) => call<void>('RemoveSecret', name),
+  generateSSHKey: (name: string, host: string, description: string, agentUse: boolean) => call<SecretInfo>('GenerateSSHKey', name, host, description, agentUse),
+  verifyGitHubToken: (name: string) => call<GitHubIdentity>('VerifyGitHubToken', name),
+  addSSHKeyToGitHub: (sshName: string, tokenName: string) => call<void>('AddSSHKeyToGitHub', sshName, tokenName),
 };
 
 export type Api = typeof api;

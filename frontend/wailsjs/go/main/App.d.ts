@@ -7,6 +7,8 @@ export function AccountStatus():Promise<main.AccountState>;
 
 export function AddMCPServer(arg1:main.MCPInput):Promise<main.UIState>;
 
+export function AddSSHKeyToGitHub(arg1:string,arg2:string):Promise<void>;
+
 export function Analyze(arg1:string):Promise<app.Reply>;
 
 export function AttachBytes(arg1:string,arg2:string):Promise<main.AttachmentInfo>;
@@ -43,6 +45,8 @@ export function CreatePlan(arg1:string):Promise<app.Reply>;
 
 export function CreateScheduledTask(arg1:app.ScheduleRequest):Promise<Array<app.ScheduledTask>>;
 
+export function CreateVault(arg1:string,arg2:string):Promise<any>;
+
 export function DeletePath(arg1:string):Promise<main.FileBrowser>;
 
 export function DeletePlan(arg1:string):Promise<app.Reply>;
@@ -57,6 +61,8 @@ export function DiscoverMCPTools(arg1:string):Promise<Array<main.MCPToolInfo>>;
 
 export function ExecutePlan(arg1:string):Promise<app.Reply>;
 
+export function GenerateSSHKey(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<any>;
+
 export function InstallMarketPackage(arg1:string,arg2:boolean,arg3:boolean):Promise<main.MarketState>;
 
 export function ListFiles(arg1:string):Promise<main.FileBrowser>;
@@ -64,6 +70,8 @@ export function ListFiles(arg1:string):Promise<main.FileBrowser>;
 export function LiveVisualizations():Promise<Array<any>>;
 
 export function LoadSession(arg1:string,arg2:number):Promise<app.Reply>;
+
+export function LockVault():Promise<any>;
 
 export function MCPServer(arg1:string):Promise<any>;
 
@@ -109,7 +117,11 @@ export function RecordVisualEvents(arg1:string,arg2:Array<Record<string, any>>):
 
 export function RemoveQueuedChat(arg1:string):Promise<app.SubmissionSnapshot>;
 
+export function RemoveSecret(arg1:string):Promise<void>;
+
 export function RenamePath(arg1:main.FileRenameRequest):Promise<main.FileBrowser>;
+
+export function ReprotectVault(arg1:string,arg2:string):Promise<any>;
 
 export function RespondVisualization(arg1:any):Promise<any>;
 
@@ -137,6 +149,8 @@ export function SaveProjects(arg1:Array<app.Project>,arg2:string):Promise<main.P
 
 export function SavePrompts(arg1:app.PromptConfig):Promise<main.UIState>;
 
+export function SaveSecret(arg1:any):Promise<any>;
+
 export function SaveServiceAccount(arg1:app.ServiceAccountInput):Promise<void>;
 
 export function SaveSkill(arg1:main.SkillSaveRequest):Promise<main.SkillFile>;
@@ -152,6 +166,10 @@ export function SearchHistory(arg1:any):Promise<any>;
 export function SearchSessions(arg1:string):Promise<Array<main.SessionSummary>>;
 
 export function SearchSessionsWith(arg1:any):Promise<Array<main.SessionSummary>>;
+
+export function SecretKinds():Promise<Array<any>>;
+
+export function Secrets():Promise<Array<any>>;
 
 export function SendAlso(arg1:string):Promise<app.Reply>;
 
@@ -205,9 +223,15 @@ export function Thoughts():Promise<Array<app.ThoughtSnapshot>>;
 
 export function ToggleMCPServer(arg1:string,arg2:string):Promise<main.UIState>;
 
+export function UnlockVault(arg1:string):Promise<any>;
+
 export function Usage():Promise<app.UsageSnapshot>;
 
 export function UsageSummary():Promise<app.UsageSnapshot>;
+
+export function VaultStatus():Promise<any>;
+
+export function VerifyGitHubToken(arg1:string):Promise<any>;
 
 export function VisualEvents(arg1:string,arg2:number):Promise<Array<Record<string, any>>>;
 

@@ -6,6 +6,7 @@ import {appStore, accents, applyAppearance, applyUIState, refreshState, type Set
 import ProjectsView from '../../ProjectsView';
 import {ModelsSettings} from './ModelsSettings';
 import {AccountsSettings} from './AccountsSettings';
+import {SecretsSettings} from './SecretsSettings';
 import {AgentSettings} from './AgentSettings';
 import {UsageSettings} from './UsageSettings';
 import {Segmented} from '../../ui/Tabs';
@@ -16,6 +17,7 @@ const sections: {id: SettingsSection; label: string; hint: string}[] = [
   {id: 'projects', label: 'Projects', hint: 'Folders and permissions'},
   {id: 'models', label: 'Models', hint: 'Manager and subagents'},
   {id: 'accounts', label: 'Accounts', hint: 'Sign-in and API keys'},
+  {id: 'secrets', label: 'Secrets', hint: 'Vault, GitHub, keys'},
   {id: 'agent', label: 'Agent', hint: 'Effort, limits, context'},
   {id: 'prompts', label: 'Prompts', hint: 'System instructions'},
   {id: 'appearance', label: 'Appearance', hint: 'Theme and name'},
@@ -39,6 +41,7 @@ export function SettingsView() {
           {section === 'projects' && <ProjectsSettings />}
           {section === 'models' && <ModelsSettings />}
           {section === 'accounts' && <AccountsSettings />}
+          {section === 'secrets' && <SecretsSettings />}
           {section === 'agent' && <AgentSettings />}
           {section === 'prompts' && <PromptSettings />}
           {section === 'appearance' && <AppearanceSettings />}

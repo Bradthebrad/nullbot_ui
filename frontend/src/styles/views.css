@@ -533,3 +533,26 @@ mark { padding: 0 1px; border-radius: 2px; background: var(--signal-soft); color
 .data-table .row-num { width: 44px; text-align: right; }
 .preview-archive .table-scroll, .preview-ods .table-scroll { padding: 0 12px 24px; }
 .pathbar.editing { gap: 6px; }
+
+/* secrets */
+.vault-panel { display: grid; gap: 10px; padding: 14px 16px; margin-bottom: 4px; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--surface-2); }
+.vault-line { display: flex; align-items: flex-start; gap: 10px; }
+.vault-line > svg { flex: none; margin-top: 2px; color: var(--ink-2); }
+.vault-text { display: grid; flex: 1; gap: 2px; min-width: 0; }
+.vault-text strong { font-weight: 500; }
+.vault-text .mono { overflow-wrap: anywhere; font-size: var(--text-sm); }
+.row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+.row-actions.end { justify-content: flex-end; flex-wrap: nowrap; }
+.public-key { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--surface-2); }
+.public-key code { flex: 1; min-width: 0; font-size: var(--text-sm); overflow-wrap: anywhere; word-break: break-all; }
+.secrets-table { width: 100%; }
+.secrets-table td { vertical-align: top; }
+.secrets-table .provides { font-size: var(--text-sm); overflow-wrap: anywhere; }
+.secret-desc { display: block; margin-top: 2px; font-size: var(--text-sm); }
+.secrets-table .tag { margin-top: 4px; }
+.check.compact { justify-content: center; }
+.server-picks { display: grid; gap: 6px; margin: 14px 0 0; padding: 0; border: 0; }
+.server-picks legend { margin-bottom: 6px; color: var(--ink-2); font-size: var(--text-sm); font-weight: 500; }
+.secret-editor .check { margin-top: 14px; }
+.secret-text { min-height: 96px; }

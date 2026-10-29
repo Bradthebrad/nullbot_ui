@@ -10,6 +10,10 @@ export function AddMCPServer(arg1) {
   return window['go']['main']['App']['AddMCPServer'](arg1);
 }
 
+export function AddSSHKeyToGitHub(arg1, arg2) {
+  return window['go']['main']['App']['AddSSHKeyToGitHub'](arg1, arg2);
+}
+
 export function Analyze(arg1) {
   return window['go']['main']['App']['Analyze'](arg1);
 }
@@ -82,6 +86,10 @@ export function CreateScheduledTask(arg1) {
   return window['go']['main']['App']['CreateScheduledTask'](arg1);
 }
 
+export function CreateVault(arg1, arg2) {
+  return window['go']['main']['App']['CreateVault'](arg1, arg2);
+}
+
 export function DeletePath(arg1) {
   return window['go']['main']['App']['DeletePath'](arg1);
 }
@@ -110,6 +118,10 @@ export function ExecutePlan(arg1) {
   return window['go']['main']['App']['ExecutePlan'](arg1);
 }
 
+export function GenerateSSHKey(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['GenerateSSHKey'](arg1, arg2, arg3, arg4);
+}
+
 export function InstallMarketPackage(arg1, arg2, arg3) {
   return window['go']['main']['App']['InstallMarketPackage'](arg1, arg2, arg3);
 }
@@ -124,6 +136,10 @@ export function LiveVisualizations() {
 
 export function LoadSession(arg1, arg2) {
   return window['go']['main']['App']['LoadSession'](arg1, arg2);
+}
+
+export function LockVault() {
+  return window['go']['main']['App']['LockVault']();
 }
 
 export function MCPServer(arg1) {
@@ -214,8 +230,16 @@ export function RemoveQueuedChat(arg1) {
   return window['go']['main']['App']['RemoveQueuedChat'](arg1);
 }
 
+export function RemoveSecret(arg1) {
+  return window['go']['main']['App']['RemoveSecret'](arg1);
+}
+
 export function RenamePath(arg1) {
   return window['go']['main']['App']['RenamePath'](arg1);
+}
+
+export function ReprotectVault(arg1, arg2) {
+  return window['go']['main']['App']['ReprotectVault'](arg1, arg2);
 }
 
 export function RespondVisualization(arg1) {
@@ -270,6 +294,10 @@ export function SavePrompts(arg1) {
   return window['go']['main']['App']['SavePrompts'](arg1);
 }
 
+export function SaveSecret(arg1) {
+  return window['go']['main']['App']['SaveSecret'](arg1);
+}
+
 export function SaveServiceAccount(arg1) {
   return window['go']['main']['App']['SaveServiceAccount'](arg1);
 }
@@ -300,6 +328,14 @@ export function SearchSessions(arg1) {
 
 export function SearchSessionsWith(arg1) {
   return window['go']['main']['App']['SearchSessionsWith'](arg1);
+}
+
+export function SecretKinds() {
+  return window['go']['main']['App']['SecretKinds']();
+}
+
+export function Secrets() {
+  return window['go']['main']['App']['Secrets']();
 }
 
 export function SendAlso(arg1) {
@@ -406,12 +442,24 @@ export function ToggleMCPServer(arg1, arg2) {
   return window['go']['main']['App']['ToggleMCPServer'](arg1, arg2);
 }
 
+export function UnlockVault(arg1) {
+  return window['go']['main']['App']['UnlockVault'](arg1);
+}
+
 export function Usage() {
   return window['go']['main']['App']['Usage']();
 }
 
 export function UsageSummary() {
   return window['go']['main']['App']['UsageSummary']();
+}
+
+export function VaultStatus() {
+  return window['go']['main']['App']['VaultStatus']();
+}
+
+export function VerifyGitHubToken(arg1) {
+  return window['go']['main']['App']['VerifyGitHubToken'](arg1);
 }
 
 export function VisualEvents(arg1, arg2) {

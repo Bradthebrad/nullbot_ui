@@ -278,3 +278,22 @@ export type VisualDelivery = {visual: Visualization; how: 'tool' | 'steer' | 'qu
 /** One recorded interaction, as the bridge or the window collected it. */
 export type VisualEvent = {type: string; t?: number; at?: string; page?: string; target?: string; value?: unknown; key?: string; name?: string; label?: string; message?: string; level?: string; text?: string; url?: string; source?: string; data?: unknown; [key: string]: unknown};
 
+
+/** The secrets vault: how it is protected and whether it is open. */
+export type VaultInfo = {
+  path: string; exists: boolean; protection?: string; unlocked: boolean; error?: string; updated?: string;
+  keychain?: string; secrets: number; plaintext?: string[]; protection_label?: string; keychain_label?: string;
+};
+/** A saved secret, without its values. */
+export type SecretInfo = {
+  name: string; kind: string; label: string; description?: string; public?: Record<string, string>;
+  set: string[]; provides: string[]; agent_use: boolean; servers?: string[]; created_by?: string;
+  created: string; updated: string; hint?: string;
+};
+export type SecretField = {name: string; label: string; secret: boolean; required?: boolean; multiline?: boolean; hint?: string; derived?: boolean};
+export type SecretKind = {kind: string; label: string; description: string; fields: SecretField[]; file_based?: boolean};
+export type SecretInput = {
+  name: string; kind: string; description?: string; values?: Record<string, string>; public?: Record<string, string>;
+  clear_values?: string[]; agent_use: boolean; servers?: string[];
+};
+export type GitHubIdentity = {login: string; name?: string; scopes?: string; host: string};
