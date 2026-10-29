@@ -17,7 +17,7 @@ const sections: {id: SettingsSection; label: string; hint: string}[] = [
   {id: 'projects', label: 'Projects', hint: 'Folders and permissions'},
   {id: 'models', label: 'Models', hint: 'Manager and subagents'},
   {id: 'accounts', label: 'Accounts', hint: 'Sign-in and API keys'},
-  {id: 'secrets', label: 'Secrets', hint: 'Vault, GitHub, keys'},
+  {id: 'secrets', label: 'Secrets', hint: 'Vault, GitHub, cloud accounts'},
   {id: 'agent', label: 'Agent', hint: 'Effort, limits, context'},
   {id: 'prompts', label: 'Prompts', hint: 'System instructions'},
   {id: 'appearance', label: 'Appearance', hint: 'Theme and name'},

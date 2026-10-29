@@ -243,6 +243,14 @@ Google Cloud, what they cost, and the plans that made them. Every change is
 a plan of exact `aws` or `gcloud` commands that runs only after you approve
 it here; an agent can propose one (when you allow it) but never approve it.
 
+Start under **Accounts** (also in Settings > Secrets): **Add AWS account**
+takes an IAM user's access key and region, **Add Google Cloud account** a
+service account's JSON key file. Each is checked as soon as it is saved, and
+**Check** asks again: AWS says which account and user the key signs in as,
+Google Cloud whether it signs in and can use Compute Engine. Checking
+changes nothing and costs nothing. The account says when the `aws` or
+`gcloud` command it needs is not installed.
+
 <img alt="A plan waiting for approval: why the main agent asked for a GPU machine, what it makes and costs, and its first commands, with Reject and Approve and run at the bottom" src="docs/images/cloud-plan.png">
 
 A machine shows its address, who can reach which port, and, on request,
@@ -290,6 +298,8 @@ NullBot runs elsewhere).
 - **GitHub in two clicks.** Save a token and NullBot checks who it signs in
   as; make an Ed25519 SSH key and add its public key to that account. git over
   HTTPS and SSH then just works in commands that ask for them.
+- **Cloud accounts** for AWS and Google Cloud have their own group, with what
+  each key signs in as (see [Cloud](#cloud)).
 - **Off for agents by default.** Turning on *Agents may use* asks first, and a
   tool server gets a secret only if you name it.
 - Keys saved in older versions in plain text are moved in and deleted.

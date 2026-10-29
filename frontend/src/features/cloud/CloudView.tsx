@@ -7,8 +7,8 @@ import {useStore} from '../../lib/store';
 import {api} from '../../lib/bindings';
 import {useResource} from '../../lib/useResource';
 import {formatDateTime, relativeTime} from '../../lib/format';
-import type {InfraLedgerEntry, InfraPlan, InfraResource, InfraState, InfraStep, NodeReport, Tunnel} from '../../lib/types';
-import {openSettings} from '../../state/app';
+import type {CloudAccount, InfraLedgerEntry, InfraPlan, InfraResource, InfraState, InfraStep, NodeReport, Tunnel} from '../../lib/types';
+import {CloudAccounts} from '../settings/CloudAccounts';
 import {infraStore, requesterName, selectInfra} from '../../state/infra';
 import {Blank, DetailHeader, Facts, ListGroup, ListRow, Panes, Section, Spinner, StatusTag} from '../../ui/layout';
 import {MenuButton} from '../../ui/Menu';
@@ -55,7 +55,8 @@ export function shellQuote(arg: string) {
 }
 
 export function CloudView() {
-  const {data, error, loading, reload} = useResource(() => api.infraState(), {topics: ['infra']});
+  // Accounts are vault secrets: they change with the secrets topic.
+  const {data, error, loading, reload} = useResource(() => api.infraState(), {topics: ['infra', 'secrets']});
   const tunnels = useResource(() => api.tunnels().then(list => (Array.isArray(list) ? list : [])), {topics: ['infra'], initial: [] as Tunnel[]});
   const selected = useStore(infraStore, state => state.selected);
   const state: InfraState | undefined = data;
@@ -68,6 +69,7 @@ export function CloudView() {
   const machines = resources.filter(r => r.kind === 'instance' && r.state !== 'deleted');
   const buckets = resources.filter(r => r.kind === 'bucket' && r.state !== 'deleted');
   const missingTools = Object.entries(state?.tools || {}).filter(([, path]) => path.startsWith('missing'));
+  const accounts = state?.accounts || [];
 
   // Something waiting for approval comes first.
   const fallback = waiting[0]?.id || running[0]?.id || machines[0]?.id || buckets[0]?.id || '';
@@ -85,9 +87,15 @@ export function CloudView() {
     <HereDetail />
   ) : current === 'ledger' ? (
     <LedgerDetail plans={plans} />
+  ) : current === 'accounts' || current.startsWith('account:') ? (
+    <AccountsDetail focus={current.slice('account:'.length)} />
   ) : (
-    <Blank title="Machines and storage in your cloud, under your control" action={<button className="btn" onClick={() => openSettings('secrets')}>Add cloud credentials</button>}>
-      NullBot can create machines and buckets on AWS and Google Cloud. Every change is a plan of exact aws or gcloud commands, and nothing runs until you approve it here. Add credentials in Settings, then ask for what you need in chat, or run nullbot infra plan.
+    <Blank
+      title="Machines and storage in your cloud, under your control"
+      action={!accounts.length ? <button className="btn btn-primary" onClick={() => selectInfra('accounts')}>Add a cloud account</button> : undefined}
+    >
+      NullBot can create machines and buckets on AWS and Google Cloud. Every change is a plan of exact aws or gcloud commands, and nothing runs until you approve it here.{' '}
+      {accounts.length ? 'Ask for what you need in chat, or run nullbot infra plan.' : 'Start by adding the AWS or Google Cloud account plans will use.'}
     </Blank>
   );
 
@@ -152,6 +160,26 @@ export function CloudView() {
                 ))}
               </ListGroup>
             )}
+            <ListGroup title="Accounts" count={accounts.length || undefined}>
+              {accounts.map(a => (
+                <ListRow
+                  key={a.name}
+                  selected={current === `account:${a.name}`}
+                  onSelect={() => selectInfra(`account:${a.name}`)}
+                  tone={a.checked ? 'ok' : 'idle'}
+                  title={a.name}
+                  subtitle={accountSummary(a)}
+                />
+              ))}
+              {!accounts.length && (
+                <ListRow
+                  selected={current === 'accounts'}
+                  onSelect={() => selectInfra('accounts')}
+                  title="Add an account"
+                  subtitle={state?.accounts_error || 'AWS or Google Cloud'}
+                />
+              )}
+            </ListGroup>
             <ListGroup title="Records">
               <ListRow selected={current === 'here'} onSelect={() => selectInfra('here')} title="This computer" subtitle="What listens on which port" />
               <ListRow selected={current === 'ledger'} onSelect={() => selectInfra('ledger')} title="Ledger" subtitle="Every proposal, decision and command" />
@@ -165,6 +193,21 @@ export function CloudView() {
         }
         detail={detail}
       />
+    </div>
+  );
+}
+
+function accountSummary(a: CloudAccount) {
+  return [cloudName(a.cloud), a.region || a.project, a.checked ? '' : 'not checked'].filter(Boolean).join(', ');
+}
+
+function AccountsDetail({focus}: {focus: string}) {
+  return (
+    <div className="detail">
+      <DetailHeader title="Accounts" subtitle="What plans sign in to AWS and Google Cloud with. Keys stay in the vault." />
+      <div className="detail-body">
+        <CloudAccounts focus={focus} />
+      </div>
     </div>
   );
 }

@@ -8,6 +8,7 @@ import {useFocusedChatState} from '../features/chat/ChatContext';
 import {MAIN_CHAT, chatsStore, focusedChat, groupOfChat, showChat} from '../state/chats';
 import {closeChat, newChat, renameChat} from '../features/chat/ChatView';
 import {openVisual, visualStore} from '../state/visuals';
+import {selectInfra} from '../state/infra';
 import {confirmDialog, promptDialog} from '../ui/dialogs';
 import {toast, toastError} from '../ui/toast';
 
@@ -33,6 +34,7 @@ function useCommands(): Command[] {
       {id: 'go-tools', group: 'Go to', title: 'Tools: servers, skills and marketplace', hint: 'Ctrl+5', run: go('tools')},
       {id: 'go-history', group: 'Go to', title: 'History', hint: 'Ctrl+6', run: go('history')},
       {id: 'go-cloud', group: 'Go to', title: 'Cloud', hint: 'Ctrl+7', run: go('cloud')},
+      {id: 'go-cloud-accounts', group: 'Go to', title: 'Cloud accounts: AWS and Google Cloud', keywords: 'aws gcp gcloud credentials access key service account iam', run: () => { selectInfra('accounts'); setView('cloud'); }},
       {id: 'go-projects', group: 'Settings', title: 'Projects and permissions', keywords: 'folders access workspace', run: section('projects')},
       {id: 'go-models', group: 'Settings', title: 'Models', keywords: 'provider openai anthropic codex', run: section('models')},
       {id: 'go-accounts', group: 'Settings', title: 'Accounts and API keys', keywords: 'keys credentials gmail', run: section('accounts')},
@@ -40,7 +42,7 @@ function useCommands(): Command[] {
       {id: 'go-prompts', group: 'Settings', title: 'System prompts', run: section('prompts')},
       {id: 'go-appearance', group: 'Settings', title: 'Appearance and bot name', keywords: 'theme dark light color', run: section('appearance')},
       {id: 'go-usage', group: 'Settings', title: 'Usage and cost', keywords: 'tokens', run: section('usage')},
-      {id: 'go-secrets', group: 'Settings', title: 'Secrets and GitHub', keywords: 'vault token ssh key password credentials aws gcp', run: section('secrets')},
+      {id: 'go-secrets', group: 'Settings', title: 'Secrets, GitHub and cloud accounts', keywords: 'vault token ssh key password credentials aws gcp', run: section('secrets')},
       {id: 'chat-new', group: 'Chats', title: 'New chat', hint: 'Ctrl+T', keywords: 'tab session parallel', run: async () => {
         setView('chat');
         const group = groupOfChat(chatsStore.get().layout, focusedChat())?.id;

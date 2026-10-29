@@ -6,7 +6,7 @@ import type {
   Reply, ScheduledTask, SessionSummary, SkillFile, SubmissionSnapshot, UIState, UsageReport, Visualization, VisualDelivery, VisualEvent, VisualView,
   VaultInfo, SecretInfo, SecretKind, SecretInput, GitHubIdentity, ChatInfo,
   LocalEndpoint, LocalEndpointInfo, LocalServerFound, LocalServerKind, HFModel, HFBuild, InstallRequest, Hardware, ModelFitOptions, ModelFits,
-  InfraState, InfraPlan, InfraLedgerEntry, NodeReport, Tunnel,
+  InfraState, InfraPlan, InfraLedgerEntry, NodeReport, Tunnel, CloudIdentity,
 } from './types';
 
 const go = Go as unknown as Record<string, (...args: any[]) => Promise<any>>;
@@ -49,6 +49,7 @@ export const api = {
   machineHardware: (refresh = false) => call<{hardware: Hardware; summary: string}>('MachineHardware', refresh),
   suggestModels: (options: ModelFitOptions) => call<ModelFits>('SuggestModels', options),
   infraState: () => call<InfraState>('InfraState'),
+  checkCloudAccount: (name: string) => call<CloudIdentity>('CheckCloudAccount', name),
   /** Approve or reject a plan; approving with run also starts it. People only: no agent tool reaches this. */
   decideInfraPlan: (id: string, approve: boolean, run: boolean, seen: string) => call<InfraPlan>('DecideInfraPlan', id, approve, run, seen),
   runInfraPlan: (id: string) => call<void>('RunInfraPlan', id),

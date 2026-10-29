@@ -45,6 +45,8 @@ export function ChatSubmissions(arg1:string):Promise<any>;
 
 export function Chats():Promise<Array<any>>;
 
+export function CheckCloudAccount(arg1:string):Promise<any>;
+
 export function CloseChat(arg1:string):Promise<void>;
 
 export function Command(arg1:string):Promise<app.Reply>;

@@ -133,6 +133,17 @@ func (a *App) SetInfraAgentTools(on bool) error {
 	return a.bot.UpdateConfig(func(c *nullbot.Config) { c.Infra.AgentTools = on })
 }
 
+// CheckCloudAccount asks AWS or Google Cloud who an account's key signs in
+// as. It changes nothing and costs nothing.
+func (a *App) CheckCloudAccount(name string) (nullbot.CloudIdentity, error) {
+	if err := a.ready(); err != nil {
+		return nullbot.CloudIdentity{}, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	return a.bot.CheckCloudAccount(ctx, name)
+}
+
 // InspectNode logs in to a machine NullBot made and reads what it runs.
 func (a *App) InspectNode(id string) (nullbot.NodeReport, error) {
 	if err := a.ready(); err != nil {

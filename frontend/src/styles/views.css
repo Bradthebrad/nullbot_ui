@@ -556,6 +556,18 @@ mark { padding: 0 1px; border-radius: 2px; background: var(--signal-soft); color
 .server-picks legend { margin-bottom: 6px; color: var(--ink-2); font-size: var(--text-sm); font-weight: 500; }
 .secret-editor .check { margin-top: 14px; }
 .secret-text { min-height: 96px; }
+.file-pick { display: inline-flex; width: fit-content; margin-top: 6px; cursor: pointer; }
+.file-pick:has(input:focus-visible) { outline: 2px solid var(--signal); outline-offset: 1px; }
+
+/* cloud accounts */
+.cloud-accounts .account-main .mono { overflow-wrap: anywhere; }
+.cloud-accounts .link-button { display: inline-flex; align-items: center; gap: 3px; }
+.cloud-accounts .notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; max-width: 64ch; font-size: var(--text-sm); }
+.cloud-accounts .notice .btn { gap: 5px; }
+.detail-body > .cloud-accounts { border-top: 0; }
+.detail-body > .cloud-accounts > .account:first-child { padding-top: 0; }
+.account.is-focused { margin-left: -12px; padding-left: 10px; border-left: 2px solid var(--signal); }
+.cloud-accounts-locked { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 
 /* local model servers */
 .local-found { display: grid; gap: 6px; margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--surface-2); }
