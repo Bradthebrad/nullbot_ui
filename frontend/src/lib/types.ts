@@ -146,6 +146,12 @@ export type LocalModel = {id: string; name?: string; context_window?: number; ma
 export type LocalEndpointInfo = LocalEndpoint & {provider: string; title: string; kind_label: string; status: {reachable: boolean; version?: string; error?: string; latency_ns?: number}; models?: LocalModel[]; insecure?: boolean};
 export type LocalServerFound = {kind: string; base_url: string; version?: string; models: number; label: string; configured_as?: string};
 export type LocalServerKind = {id: string; label: string; default_url: string};
+export type HFModel = {id: string; author?: string; pipeline?: string; downloads: number; likes: number; last_modified?: string; tags?: string[]; needs_token?: boolean};
+export type HFBuild = {name: string; quant?: string; size: number; files: string[]; parts: number; complete: boolean; projector?: boolean; recommended?: boolean};
+export type InstallTarget = 'ollama' | 'lmstudio' | 'files';
+export type InstallRequest = {repo: string; build?: string; quant?: string; target: InstallTarget; server?: string};
+export type InstallResult = {target: InstallTarget; model: string; paths?: string[]; next?: string};
+export type ModelInstallEvent = {id: string; repo: string; status: string; file?: string; done?: number; total?: number; ended?: boolean; error?: string; result?: InstallResult};
 export type ModelPullEvent = {server: string; model: string; status: string; completed?: number; total?: number; done?: boolean; error?: string};
 
 export type AgentTask = {

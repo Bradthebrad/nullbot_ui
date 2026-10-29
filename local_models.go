@@ -139,3 +139,92 @@ func (a *App) DeleteLocalModel(server, model string) error {
 	defer cancel()
 	return a.bot.DeleteLocalModel(ctx, server, model)
 }
+
+// Installing models from Hugging Face. Installs run in the background and
+// report progress as "model-install" events.
+
+// ModelInstallEvent is a step of an install, or its end.
+type ModelInstallEvent struct {
+	ID     string                 `json:"id"`
+	Repo   string                 `json:"repo"`
+	Status string                 `json:"status"`
+	File   string                 `json:"file,omitempty"`
+	Done   int64                  `json:"done,omitempty"`
+	Total  int64                  `json:"total,omitempty"`
+	Ended  bool                   `json:"ended,omitempty"`
+	Error  string                 `json:"error,omitempty"`
+	Result *nullbot.InstallResult `json:"result,omitempty"`
+}
+
+var installs = struct {
+	sync.Mutex
+	seq    int
+	cancel map[string]context.CancelFunc
+}{cancel: map[string]context.CancelFunc{}}
+
+func (a *App) SearchHFModels(query, sort string, limit int) ([]nullbot.HFModel, error) {
+	if err := a.ready(); err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return a.bot.SearchHFModels(ctx, query, sort, limit)
+}
+
+func (a *App) HFBuilds(repo string) ([]nullbot.HFBuild, error) {
+	if err := a.ready(); err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return a.bot.HFBuilds(ctx, repo)
+}
+
+// InstallModel starts an install and returns its id at once.
+func (a *App) InstallModel(req nullbot.InstallRequest) (string, error) {
+	if err := a.ready(); err != nil {
+		return "", err
+	}
+	installs.Lock()
+	installs.seq++
+	id := fmt.Sprintf("install-%d", installs.seq)
+	ctx, cancel := context.WithCancel(context.Background())
+	installs.cancel[id] = cancel
+	installs.Unlock()
+	go func() {
+		defer func() {
+			installs.Lock()
+			delete(installs.cancel, id)
+			installs.Unlock()
+			cancel()
+		}()
+		last := time.Time{}
+		res, err := a.bot.InstallModel(ctx, req, func(p nullbot.InstallProgress) {
+			if time.Since(last) < 250*time.Millisecond {
+				return
+			}
+			last = time.Now()
+			a.emit("model-install", ModelInstallEvent{ID: id, Repo: req.Repo, Status: p.Status, File: p.File, Done: p.Done, Total: p.Total})
+		})
+		end := ModelInstallEvent{ID: id, Repo: req.Repo, Status: "done", Ended: true}
+		if err != nil {
+			end.Status, end.Error = "failed", err.Error()
+			if ctx.Err() != nil {
+				end.Status, end.Error = "canceled", ""
+			}
+		} else {
+			end.Result = &res
+		}
+		a.emit("model-install", end)
+	}()
+	return id, nil
+}
+
+// CancelInstall stops an install.
+func (a *App) CancelInstall(id string) {
+	installs.Lock()
+	defer installs.Unlock()
+	if cancel := installs.cancel[id]; cancel != nil {
+		cancel()
+	}
+}

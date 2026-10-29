@@ -570,3 +570,15 @@ mark { padding: 0 1px; border-radius: 2px; background: var(--signal-soft); color
 .local-pull-form { display: flex; gap: 6px; margin-top: 4px; }
 .local-pull-form .input { flex: 1; min-width: 0; }
 .warn-text { color: var(--signal-ink); }
+
+/* installing models */
+.install-search { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.install-search .input { flex: 1 1 260px; min-width: 0; }
+.install-results { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: var(--text-sm); }
+.install-builds { display: grid; gap: 10px; }
+.install-target { max-width: 360px; }
+.install-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+.install-table th { padding: 4px 8px 6px 0; color: var(--ink-3); font-weight: 500; text-align: left; border-bottom: 1px solid var(--line-strong); }
+.install-table td { padding: 6px 8px 6px 0; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.install-table .num { text-align: right; }
+.install-table .tag { margin-left: 6px; }

@@ -286,3 +286,11 @@ export function CancelLocalPull(arg1:any,arg2:any):Promise<void>;
 export function CopyLocalModelWithContext(arg1:any,arg2:any,arg3:any):Promise<string>;
 
 export function DeleteLocalModel(arg1:any,arg2:any):Promise<void>;
+
+export function SearchHFModels(arg1:any,arg2:any,arg3:any):Promise<any>;
+
+export function HFBuilds(arg1:any):Promise<any>;
+
+export function InstallModel(arg1:any):Promise<string>;
+
+export function CancelInstall(arg1:any):Promise<void>;

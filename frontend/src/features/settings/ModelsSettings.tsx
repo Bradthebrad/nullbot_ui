@@ -10,6 +10,7 @@ import {toastError} from '../../ui/toast';
 import {Group, NumberField, SaveBar, useConfigDraft} from './form';
 import {ModelFields, invalidWindows, providerLabel, providerReady, type ModelValue} from './modelFields';
 import {LocalServers} from './LocalServers';
+import {ModelInstall} from './ModelInstall';
 
 const managed = ['model', 'subagent_model', 'agent.max_subagents', 'compaction.context_windows'];
 
@@ -74,6 +75,8 @@ export function ModelsSettings() {
       </Group>
 
       <LocalServers />
+
+      <ModelInstall />
 
       <Catalog groups={groups} runtime={runtime} manager={keyOf(manager)} subagent={following ? keyOf(manager) : keyOf(subagent)} onAssign={assign} />
 

@@ -569,3 +569,19 @@ export function CopyLocalModelWithContext(arg1,arg2,arg3) {
 export function DeleteLocalModel(arg1,arg2) {
   return window['go']['main']['App']['DeleteLocalModel'](arg1,arg2);
 }
+
+export function SearchHFModels(arg1,arg2,arg3) {
+  return window['go']['main']['App']['SearchHFModels'](arg1,arg2,arg3);
+}
+
+export function HFBuilds(arg1) {
+  return window['go']['main']['App']['HFBuilds'](arg1);
+}
+
+export function InstallModel(arg1) {
+  return window['go']['main']['App']['InstallModel'](arg1);
+}
+
+export function CancelInstall(arg1) {
+  return window['go']['main']['App']['CancelInstall'](arg1);
+}
