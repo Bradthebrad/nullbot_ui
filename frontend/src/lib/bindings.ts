@@ -50,7 +50,7 @@ export const api = {
   suggestModels: (options: ModelFitOptions) => call<ModelFits>('SuggestModels', options),
   infraState: () => call<InfraState>('InfraState'),
   /** Approve or reject a plan; approving with run also starts it. People only: no agent tool reaches this. */
-  decideInfraPlan: (id: string, approve: boolean, run = true) => call<InfraPlan>('DecideInfraPlan', id, approve, run),
+  decideInfraPlan: (id: string, approve: boolean, run: boolean, seen: string) => call<InfraPlan>('DecideInfraPlan', id, approve, run, seen),
   runInfraPlan: (id: string) => call<void>('RunInfraPlan', id),
   stopInfraPlan: (id: string) => call<boolean>('StopInfraPlan', id),
   planInfraDestroy: (ids: string[], deleteContents: boolean, reason = '') => call<InfraPlan>('PlanInfraDestroy', ids, deleteContents, reason),

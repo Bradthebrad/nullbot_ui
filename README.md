@@ -236,6 +236,23 @@ or a folder for llama.cpp.
 
 <img alt="Install a model: this computer's CPU, RAM and GPU, and the models that run well on it with their quantization, fit, where they run and estimated speed, each with a button to pull it into Ollama" src="docs/images/install-models.png">
 
+## Cloud
+
+The **Cloud** view lists the machines and buckets NullBot made on AWS and
+Google Cloud, what they cost, and the plans that made them. Every change is
+a plan of exact `aws` or `gcloud` commands that runs only after you approve
+it here; an agent can propose one (when you allow it) but never approve it.
+
+<img alt="A plan waiting for approval: why the main agent asked for a GPU machine, what it makes and costs, and its first commands, with Reject and Approve and run at the bottom" src="docs/images/cloud-plan.png">
+
+A machine shows its address, who can reach which port, and, on request,
+what runs there: listening ports, services, nginx sites and containers,
+read over SSH with its key from the vault. A tunnel brings one of its ports
+here, and **Use its Ollama here** makes its model a model server. See
+[NullBot's cloud guide](https://github.com/Bradthebrad/nullbot/blob/main/docs/INFRA.md).
+
+<img alt="A Google Cloud machine: its address, open ports limited to one address, the firewall rules made with it, and what runs there, with SSH reachable only through the firewall" src="docs/images/cloud-machine.png">
+
 ## Accounts
 
 **Settings > Accounts** holds API keys, the ChatGPT subscription sign-in,
@@ -320,10 +337,8 @@ version's notes are in [docs/changelog](docs/changelog).
 
 ## Roadmap
 
-Planned, not built yet: local models on `localhost`, the LAN or an internal
-domain; model installs with [llmfit](https://github.com/AlexsJones/llmfit) and
-Hugging Face; and tool servers that create and tear down AWS and Google Cloud
-infrastructure, with every change confirmed first. See
+Planned, not built yet: driving a headless NullBot on another machine (one
+made in the cloud, say) from this app, and OpenTofu for larger setups. See
 [NullBot's roadmap](https://github.com/Bradthebrad/nullbot/blob/main/docs/ROADMAP.md).
 
 ## Privacy

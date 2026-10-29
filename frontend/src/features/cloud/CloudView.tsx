@@ -215,7 +215,7 @@ function PlanDetail({plan, resources}: {plan: InfraPlan; resources: InfraResourc
       confirmLabel: 'Remove',
       danger: true,
     }))) return;
-    await act('approve', () => api.decideInfraPlan(plan.id, true, true), removes ? 'Removing. Each step shows here as it runs.' : 'Approved. Each step shows here as it runs.');
+    await act('approve', () => api.decideInfraPlan(plan.id, true, true, plan.hash || ''), removes ? 'Removing. Each step shows here as it runs.' : 'Approved. Each step shows here as it runs.');
   }
 
   const menu = [
@@ -253,7 +253,7 @@ function PlanDetail({plan, resources}: {plan: InfraPlan; resources: InfraResourc
           </figure>
         )}
         {plan.error && <p className="notice bad">{plan.error}</p>}
-        {(plan.notes || []).map((note, i) => <p key={i} className="notice warn">{note}</p>)}
+        {(plan.notes || []).map((note, i) => <p key={i} className={/open to|no price|spare|not found|install/i.test(note) ? 'notice warn' : 'notice'}>{note}</p>)}
         <Facts items={[
           ['Cloud', [cloudName(plan.cloud), plan.region, plan.project].filter(Boolean).join(', ')],
           ['Credentials', <><span className="mono">{plan.credential}</span><span className="faint">from the vault; never shown to agents</span></>],
@@ -292,7 +292,7 @@ function PlanDetail({plan, resources}: {plan: InfraPlan; resources: InfraResourc
             {plan.cost_hourly && plan.cost_hourly > 0 ? <>, about <strong>{hourly(plan.cost_hourly)}</strong> while it is up.</> : '.'}
           </p>
           <div className="approve-actions">
-            <button className="btn" disabled={!!working} onClick={() => void act('reject', () => api.decideInfraPlan(plan.id, false, false), 'Rejected. Nothing ran.')}><X size={13} />Reject</button>
+            <button className="btn" disabled={!!working} onClick={() => void act('reject', () => api.decideInfraPlan(plan.id, false, false, ''), 'Rejected. Nothing ran.')}><X size={13} />Reject</button>
             <button className={removes ? 'btn btn-danger-solid' : 'btn btn-primary'} disabled={!!working} onClick={() => void approve()}>
               {working === 'approve' ? <span className="spinner" /> : <Check size={13} />}
               {removes ? 'Approve and remove' : 'Approve and run'}
@@ -351,10 +351,11 @@ function resourceSummary(r: InfraResource) {
   if (d.type) bits.push(d.type);
   if (d.disk_gb) bits.push(`${d.disk_gb} GB disk`);
   if (d.spot) bits.push('spare capacity');
+  if (d.denies) bits.push(`refuses ${d.denies}`);
   if (d.ports !== undefined && r.kind !== 'instance') bits.push(`${portList(d.ports).length > 1 ? 'ports' : 'port'} ${portList(d.ports).join(', ')} from ${(d.allow_from || 'nowhere').split(',').join(', ')} only`);
   if (d.setup) bits.push(setupLabel(d));
   if (r.kind === 'bucket') bits.push(`private, in ${r.region || 'the default location'}`);
-  else if (r.cloud_id && r.kind !== 'instance') bits.push(r.cloud_id);
+  else if (r.cloud_id && r.cloud_id !== r.name && r.kind !== 'instance') bits.push(r.cloud_id);
   return bits.join(', ');
 }
 
@@ -480,7 +481,13 @@ function ResourceDetail({resource: r, resources, tunnels, onTunnels}: {resource:
         {related.length > 0 && (
           <Section title="Made with it">
             <ul className="plain-list">
-              {related.map(x => <li key={x.id}>{resourceKind[x.kind] || x.kind} <span className="mono">{x.name}</span>{x.cloud_id ? <span className="faint mono"> {x.cloud_id}</span> : null}</li>)}
+              {related.map(x => (
+                <li key={x.id}>
+                  {resourceKind[x.kind] || x.kind} <span className="mono">{x.name}</span>
+                  {x.cloud_id && x.cloud_id !== x.name ? <span className="faint mono"> {x.cloud_id}</span> : null}
+                  {resourceSummary(x) ? <span className="muted">: {resourceSummary(x)}</span> : null}
+                </li>
+              ))}
             </ul>
           </Section>
         )}

@@ -352,6 +352,8 @@ export type InfraPlan = {
   steps: InfraStep[]; resources: InfraResource[]; cost_hourly?: number; cost_note?: string; notes?: string[];
   state: 'proposed' | 'approved' | 'applying' | 'applied' | 'failed' | 'rejected'; reason?: string; requester?: string;
   created: string; decided?: string; decided_by?: string; finished?: string; error?: string;
+  /** What the plan does, hashed as it was read: approving sends it back, so only what was shown is approved. */
+  hash?: string;
 };
 export type InfraState = {agent_tools: boolean; plans: InfraPlan[] | null; resources: InfraResource[] | null; cost_hourly: number; tools: Record<string, string>};
 export type InfraLedgerEntry = {

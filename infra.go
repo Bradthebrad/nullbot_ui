@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -40,13 +41,18 @@ func (a *App) InfraState() (nullbot.InfraState, error) {
 	return a.bot.InfraState()
 }
 
-// DecideInfraPlan approves or rejects a plan. Approving with run set also
-// starts it, unless an agent waiting on it got there first.
-func (a *App) DecideInfraPlan(id string, approve, run bool) (infra.Plan, error) {
+// DecideInfraPlan approves or rejects a plan. seen is the plan's hash as
+// the view showed it: approving fails if the plan changed since. Approving
+// with run set also starts it, unless an agent waiting on it got there
+// first.
+func (a *App) DecideInfraPlan(id string, approve, run bool, seen string) (infra.Plan, error) {
 	if err := a.ready(); err != nil {
 		return infra.Plan{}, err
 	}
-	plan, err := a.bot.DecideInfraPlan(id, approve, desktopDecider)
+	if approve && seen == "" {
+		return infra.Plan{}, errors.New("reload the plan and look at it before approving")
+	}
+	plan, err := a.bot.DecideInfraPlan(id, approve, desktopDecider, seen)
 	if err != nil || !approve || !run {
 		return plan, err
 	}

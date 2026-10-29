@@ -598,8 +598,8 @@ export function InfraState() {
   return window['go']['main']['App']['InfraState']();
 }
 
-export function DecideInfraPlan(arg1,arg2,arg3) {
-  return window['go']['main']['App']['DecideInfraPlan'](arg1,arg2,arg3);
+export function DecideInfraPlan(arg1,arg2,arg3,arg4) {
+  return window['go']['main']['App']['DecideInfraPlan'](arg1,arg2,arg3,arg4);
 }
 
 export function RunInfraPlan(arg1) {

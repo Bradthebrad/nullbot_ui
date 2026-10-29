@@ -28,7 +28,7 @@ const sg: InfraResource = {
 
 const proposal = (): InfraPlan => ({
   id: 'plan-22222222', title: 'Create eval-box on AWS', cloud: 'aws', credential: 'aws-lab', region: 'eu-west-1', kind: 'create',
-  state: 'proposed', reason: 'A box to run the eval this afternoon', requester: 'agent main', created: new Date().toISOString(),
+  state: 'proposed', reason: 'A box to run the eval this afternoon', requester: 'agent main', created: new Date().toISOString(), hash: 'abc123',
   cost_hourly: 0.0496, cost_note: 'On-demand list prices in us-east-1, with the disk.',
   resources: [{...sg, id: 'nb-99999999', name: 'nb-eval-box', state: 'planned', cloud_id: ''}, {...gpu, id: 'nb-88888888', name: 'eval-box', state: 'planned', cloud_id: '', details: {type: 't3.medium', disk_gb: '30', ssh_user: 'ubuntu', ports: '8080'}}],
   steps: [
@@ -85,9 +85,9 @@ describe('cloud', () => {
     const bar = await screen.findByRole('region', {name: 'Decision'});
     expect(bridge.callsTo('DecideInfraPlan')).toEqual([]);
     fireEvent.click(within(bar).getByRole('button', {name: 'Approve and run'}));
-    await waitFor(() => expect(bridge.callsTo('DecideInfraPlan')).toEqual([['plan-22222222', true, true]]));
+    await waitFor(() => expect(bridge.callsTo('DecideInfraPlan')).toEqual([['plan-22222222', true, true, 'abc123']]));
     fireEvent.click(within(bar).getByRole('button', {name: 'Reject'}));
-    await waitFor(() => expect(bridge.callsTo('DecideInfraPlan')[1]).toEqual(['plan-22222222', false, false]));
+    await waitFor(() => expect(bridge.callsTo('DecideInfraPlan')[1]).toEqual(['plan-22222222', false, false, '']));
   });
 
   it('asks before approving a removal', async () => {
@@ -100,7 +100,7 @@ describe('cloud', () => {
     expect(within(dialog).getByText('Remove gpu-box?')).toBeTruthy();
     expect(bridge.callsTo('DecideInfraPlan')).toEqual([]);
     fireEvent.click(within(dialog).getByRole('button', {name: 'Remove'}));
-    await waitFor(() => expect(bridge.callsTo('DecideInfraPlan')).toEqual([['plan-22222222', true, true]]));
+    await waitFor(() => expect(bridge.callsTo('DecideInfraPlan')).toEqual([['plan-22222222', true, true, 'abc123']]));
   });
 
   it('shows a machine, what runs on it, and connects its Ollama', async () => {

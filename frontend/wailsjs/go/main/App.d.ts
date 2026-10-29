@@ -301,7 +301,7 @@ export function SuggestModels(arg1:any):Promise<any>;
 
 export function InfraState():Promise<any>;
 
-export function DecideInfraPlan(arg1:any,arg2:any,arg3:any):Promise<any>;
+export function DecideInfraPlan(arg1:any,arg2:any,arg3:any,arg4:any):Promise<any>;
 
 export function RunInfraPlan(arg1:any):Promise<any>;
 
