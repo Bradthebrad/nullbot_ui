@@ -355,7 +355,16 @@ export type InfraPlan = {
   /** What the plan does, hashed as it was read: approving sends it back, so only what was shown is approved. */
   hash?: string;
 };
-export type InfraState = {agent_tools: boolean; plans: InfraPlan[] | null; resources: InfraResource[] | null; cost_hourly: number; tools: Record<string, string>};
+export type InfraState = {
+  agent_tools: boolean; plans: InfraPlan[] | null; resources: InfraResource[] | null; cost_hourly: number; tools: Record<string, string>;
+  accounts?: CloudAccount[] | null; accounts_error?: string;
+};
+/** An aws or gcp secret as the Cloud view lists it. */
+export type CloudAccount = {
+  name: string; cloud: 'aws' | 'gcp' | string; region?: string; project?: string; account?: string; identity?: string; checked?: string; note?: string; agent_use: boolean;
+};
+/** What checking a cloud account found; note says what it cannot do yet. */
+export type CloudIdentity = {name: string; cloud: string; account?: string; identity?: string; region?: string; project?: string; note?: string};
 export type InfraLedgerEntry = {
   time: string; plan: string; event: string; step?: string; summary?: string; argv?: string[]; exit?: number;
   output?: string; error?: string; resource?: string; by?: string;

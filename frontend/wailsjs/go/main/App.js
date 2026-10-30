@@ -86,6 +86,10 @@ export function Chats() {
   return window['go']['main']['App']['Chats']();
 }
 
+export function CheckCloudAccount(arg1) {
+  return window['go']['main']['App']['CheckCloudAccount'](arg1);
+}
+
 export function CloseChat(arg1) {
   return window['go']['main']['App']['CloseChat'](arg1);
 }

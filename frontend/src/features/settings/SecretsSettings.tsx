@@ -1,18 +1,15 @@
-// Settings > Secrets: the encrypted vault, GitHub credentials and every
-// other secret. Values go in and never come back: the bridge returns names,
-// kinds and public details only.
-import {useEffect, useRef, useState, type FormEvent, type ReactNode} from 'react';
+// Settings > Secrets: the encrypted vault, GitHub credentials, cloud
+// accounts and every other secret. Values go in and never come back: the
+// bridge returns names, kinds and public details only.
+import {useEffect, useState, type FormEvent, type ReactNode} from 'react';
 import {Copy, KeyRound, Lock, Plus, RefreshCw} from 'lucide-react';
 import {api} from '../../lib/bindings';
 import {useResource} from '../../lib/useResource';
-import {useStore} from '../../lib/store';
-import {appStore} from '../../state/app';
-import type {SecretInfo, SecretInput, SecretKind, VaultInfo} from '../../lib/types';
-import {confirmDialog} from '../../ui/dialogs';
+import type {SecretInfo, VaultInfo} from '../../lib/types';
 import {StatusTag} from '../../ui/layout';
 import {toast, toastError} from '../../ui/toast';
-
-const message = (err: unknown) => String(err instanceof Error ? err.message : err);
+import {CloudAccounts} from './CloudAccounts';
+import {AgentToggle, RemoveButton, SecretEditor, freeName, message} from './secretParts';
 
 export function SecretsSettings() {
   const vault = useResource(api.vaultStatus, {topics: ['secrets']});
@@ -54,6 +51,14 @@ export function SecretsSettings() {
               {keys.map(key => <SSHKeyRow key={key.name} sshKey={key} tokens={tokens} onEdit={() => setEditing({secret: key})} />)}
               <SSHKeyActions taken={list.map(s => s.name)} hasKeys={keys.length > 0} onImport={() => setEditing({kind: 'ssh_key'})} />
             </div>
+          </div>
+
+          <div className="settings-group" id="cloud-accounts">
+            <div className="settings-group-head">
+              <h3>Cloud accounts</h3>
+            </div>
+            <p className="muted">The AWS and Google Cloud accounts cloud plans run with. A plan names its account, and nothing runs until you approve the plan in Cloud.</p>
+            <CloudAccounts />
           </div>
 
           <div className="settings-group">
@@ -274,11 +279,6 @@ function SSHKeyRow({sshKey, tokens, onEdit}: {sshKey: SecretInfo; tokens: Secret
   );
 }
 
-function freeName(base: string, taken: string[]) {
-  if (!taken.includes(base)) return base;
-  for (let n = 2; ; n++) if (!taken.includes(`${base}-${n}`)) return `${base}-${n}`;
-}
-
 function SSHKeyActions({taken, hasKeys, onImport}: {taken: string[]; hasKeys: boolean; onImport: () => void}) {
   const [name, setName] = useState(() => freeName('github-ssh', taken));
   useEffect(() => {
@@ -339,173 +339,5 @@ function SecretRow({secret, onEdit}: {secret: SecretInfo; onEdit: () => void}) {
         </div>
       </td>
     </tr>
-  );
-}
-
-function toInput(secret: SecretInfo): SecretInput {
-  return {name: secret.name, kind: secret.kind, description: secret.description || '', agent_use: secret.agent_use, servers: secret.servers || [], values: {}};
-}
-
-function AgentToggle({secret, compact}: {secret: SecretInfo; compact?: boolean}) {
-  const [busy, setBusy] = useState(false);
-  async function change(next: boolean) {
-    if (next && !(await confirmDialog({
-      title: `Let agents use ${secret.name}?`,
-      body: <p>Agents will be able to run commands with this secret in their environment, in projects that allow running programs. They never see the value, but a command can use it to act for you.</p>,
-      confirmLabel: 'Allow',
-    }))) return;
-    setBusy(true);
-    try {
-      await api.saveSecret({...toInput(secret), agent_use: next});
-    } catch (err) {
-      toastError(err);
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <label className={compact ? 'check compact' : 'check'}>
-      <input type="checkbox" checked={secret.agent_use} disabled={busy} onChange={event => void change(event.target.checked)} />
-      {compact ? <span className="sr-only">Agents may use {secret.name}</span> : 'Agents may use'}
-    </label>
-  );
-}
-
-function RemoveButton({secret, small}: {secret: SecretInfo; small?: boolean}) {
-  async function remove() {
-    const ok = await confirmDialog({
-      title: `Remove ${secret.name}?`,
-      body: <p>The secret is deleted from this computer. This does not revoke it with {secret.kind === 'github_token' ? 'GitHub' : 'the service that issued it'}; do that there.</p>,
-      confirmLabel: 'Remove',
-      danger: true,
-    });
-    if (!ok) return;
-    try {
-      await api.removeSecret(secret.name);
-      toast(`Removed ${secret.name}.`);
-    } catch (err) {
-      toastError(err);
-    }
-  }
-  return <button className={small ? 'btn btn-sm' : 'btn'} onClick={() => void remove()}>Remove</button>;
-}
-
-// ------------------------------------------------------------------ editor
-
-function SecretEditor({kinds, initialKind, secret, onClose, onSaved}: {kinds: SecretKind[]; initialKind?: string; secret?: SecretInfo; onClose: () => void; onSaved: () => void}) {
-  const servers = useStore(appStore, state => state.mcp);
-  const ref = useRef<HTMLDialogElement>(null);
-  const [kindID, setKindID] = useState(secret?.kind || initialKind || 'generic');
-  const [name, setName] = useState(secret?.name || '');
-  const [description, setDescription] = useState(secret?.description || '');
-  const [values, setValues] = useState<Record<string, string>>({});
-  const [publicFields, setPublic] = useState<Record<string, string>>({...(secret?.public || {})});
-  const [agentUse, setAgentUse] = useState(secret ? secret.agent_use : false);
-  const [bound, setBound] = useState<string[]>(secret?.servers || []);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const kind = kinds.find(k => k.kind === kindID) || kinds[0];
-  const fileBased = kind.file_based || (kind.kind === 'generic' && publicFields.as_file === 'yes');
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    const dialog = ref.current;
-    dialog?.showModal?.();
-    return () => {
-      dialog?.close?.();
-      if (previous?.isConnected) previous.focus();
-    };
-  }, []);
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (busy) return;
-    if (agentUse && !secret?.agent_use && !(await confirmDialog({
-      title: 'Let agents use this secret?',
-      body: <p>Agents will be able to run commands with it in their environment, in projects that allow running programs. They never see the value.</p>,
-      confirmLabel: 'Allow',
-    }))) return;
-    setBusy(true);
-    setError('');
-    const pub: Record<string, string> = {};
-    for (const field of kind.fields) if (!field.secret && !field.derived) pub[field.name] = publicFields[field.name] || '';
-    try {
-      await api.saveSecret({name: name.trim(), kind: kind.kind, description, values, public: pub, agent_use: agentUse, servers: fileBased ? [] : bound});
-      setValues({});
-      toast(`${secret ? 'Saved' : 'Added'} ${name.trim()}.`, 'success');
-      onSaved();
-    } catch (err) {
-      // Backend messages name fields, never values; the inputs are cleared anyway.
-      setValues({});
-      setError(message(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-  const set = (field: string, value: string) => setValues(current => ({...current, [field]: value}));
-  return (
-    <dialog ref={ref} className="modal modal-wide secret-editor" aria-labelledby="secret-editor-title" onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}>
-      <form onSubmit={submit} autoComplete="off">
-        <h2 id="secret-editor-title">{secret ? `Change ${secret.name}` : 'Add a secret'}</h2>
-        <div className="modal-body">
-          {!secret && (
-            <label className="field">
-              <span>Kind</span>
-              <select className="select" value={kindID} onChange={event => { setKindID(event.target.value); setValues({}); }}>
-                {kinds.map(k => <option key={k.kind} value={k.kind}>{k.label}</option>)}
-              </select>
-            </label>
-          )}
-          <p className="muted">{kind.description}</p>
-          <label className="field">
-            <span>Name</span>
-            <input className="input mono" value={name} disabled={!!secret} onChange={event => setName(event.target.value)} placeholder="aws-prod" required />
-          </label>
-          {kind.fields.filter(f => !f.derived).map(field => {
-            const saved = !!secret?.set.includes(field.name);
-            const label = `${field.label}${field.required ? '' : ' (optional)'}`;
-            if (!field.secret) {
-              return (
-                <label className="field" key={field.name}>
-                  <span>{label}</span>
-                  <input className="input mono" value={publicFields[field.name] || ''} placeholder={field.hint} onChange={event => setPublic(current => ({...current, [field.name]: event.target.value}))} />
-                </label>
-              );
-            }
-            const placeholder = saved ? 'Saved; leave empty to keep it' : field.hint || '';
-            return (
-              <label className="field" key={field.name}>
-                <span>{label}</span>
-                {field.multiline ? (
-                  <textarea className="textarea mono secret-text" rows={5} spellCheck={false} value={values[field.name] || ''} placeholder={placeholder} onChange={event => set(field.name, event.target.value)} required={field.required && !saved} />
-                ) : (
-                  <input className="input mono" type="password" autoComplete="new-password" spellCheck={false} value={values[field.name] || ''} placeholder={placeholder} onChange={event => set(field.name, event.target.value)} required={field.required && !saved} />
-                )}
-              </label>
-            );
-          })}
-          <label className="field">
-            <span>Description (optional)</span>
-            <input className="input" value={description} onChange={event => setDescription(event.target.value)} placeholder="What it is for; never the secret itself" />
-          </label>
-          <label className="check"><input type="checkbox" checked={agentUse} onChange={event => setAgentUse(event.target.checked)} />Agents may use it with secret_run</label>
-          {!fileBased && servers.length > 0 && (
-            <fieldset className="server-picks">
-              <legend>Give it to these tool servers when they start</legend>
-              {servers.map(server => (
-                <label className="check" key={server.id}>
-                  <input type="checkbox" checked={bound.includes(server.id)} onChange={event => setBound(current => event.target.checked ? [...current, server.id] : current.filter(id => id !== server.id))} />
-                  {server.name || server.id}
-                </label>
-              ))}
-            </fieldset>
-          )}
-          {fileBased && <p className="faint">Passed to commands as a temporary file, which tool servers cannot get.</p>}
-          {error && <p className="notice bad" role="alert">{error}</p>}
-        </div>
-        <div className="modal-actions">
-          <button type="button" className="btn" disabled={busy} onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn btn-primary" disabled={busy || !name.trim()}>{busy ? 'Saving…' : secret ? 'Save' : 'Add'}</button>
-        </div>
-      </form>
-    </dialog>
   );
 }
